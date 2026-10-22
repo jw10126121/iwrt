@@ -481,8 +481,6 @@ jobs:
 
     - name: Compute Cache Keys
       if: env.CACHE_TOOLCHAIN == 'true'
-      env:
-        CACHE_SCRIPTS_HASH: ${{ hashFiles('Scripts/**') }}
       run: |
         python3 "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/ci_cache_keys.py" >> "$GITHUB_ENV"
 
@@ -491,8 +489,10 @@ jobs:
       if: env.CACHE_TOOLCHAIN == 'true'
       uses: actions/cache/restore@v5
       with:
-        # 工具链严格匹配当前源码、配置和构建环境，不跨提交回退。
+        # 当前源码使用精确键；同一配置和构建环境允许回退到较早源码缓存。
         key: ${{ env.TOOLCHAIN_CACHE_KEY }}
+        restore-keys: |
+          ${{ env.TOOLCHAIN_CACHE_RESTORE_KEY }}
         path: |
           ${{ env.OPENWRT_PATH }}/staging_dir/host*
           ${{ env.OPENWRT_PATH }}/staging_dir/tool*
@@ -507,6 +507,31 @@ jobs:
           ${{ env.CCACHE_CACHE_PREFIX }}-
         path: |
           ${{ env.OPENWRT_PATH }}/.ccache
+
+    - name: Prepare Restored Build Cache (整理恢复的缓存)
+      if: env.CACHE_TOOLCHAIN == 'true' && (steps.restore_toolchain_cache.outputs.cache-matched-key != '' || steps.restore_ccache_cache.outputs.cache-matched-key != '')
+      working-directory: ${{ env.OPENWRT_PATH }}
+      run: |
+        # staging_dir 中的 stamp 时间戳可能早于本次源码 checkout；刷新后可避免
+        # make 因旧时间戳误判目标已是最新。target 目录不在缓存路径中，因此排除它。
+        if [ -d staging_dir ]; then
+          find staging_dir -type d -name stamp -not -path '*/target-*/*' -not -path '*/target/*' \
+            -exec find {} -type f -exec touch {} +
+        fi
+        mkdir -p tmp
+        echo '1' > tmp/.build
+
+    - name: Print Cache Status (打印缓存命中状态)
+      if: always() && env.CACHE_TOOLCHAIN == 'true'
+      working-directory: ${{ env.OPENWRT_PATH }}
+      run: |
+        echo "【Lin】工具链精确命中：${{ steps.restore_toolchain_cache.outputs.cache-hit }}"
+        echo "【Lin】工具链恢复键：${{ steps.restore_toolchain_cache.outputs.cache-matched-key }}"
+        echo "【Lin】ccache 精确命中：${{ steps.restore_ccache_cache.outputs.cache-hit }}"
+        echo "【Lin】ccache 恢复键：${{ steps.restore_ccache_cache.outputs.cache-matched-key }}"
+        if command -v ccache >/dev/null 2>&1; then
+          CCACHE_DIR="$OPENWRT_PATH/.ccache" ccache --show-stats || true
+        fi
 
     - name: Print Build Summary (打印编译条件摘要)
       working-directory: ${{ env.OPENWRT_PATH }}
@@ -643,6 +668,15 @@ jobs:
         echo "status=${{ steps.compile.outcome }}" >> $GITHUB_OUTPUT
         echo "COMPILE_STATUS=${{ steps.compile.outcome }}" >> $GITHUB_ENV
         echo "【Lin】${{ env.DEVICE_SUBTARGET }}-${{ env.DEVICE_PROFILE }}编译状态：${{ steps.compile.outcome }}，结束时间：$END_TIME"
+
+    - name: Print ccache Statistics (打印 ccache 命中统计)
+      if: always() && env.CACHE_TOOLCHAIN == 'true'
+      working-directory: ${{ env.OPENWRT_PATH }}
+      run: |
+        echo "【Lin】CCACHE_DIR=${CCACHE_DIR:-未设置}"
+        if command -v ccache >/dev/null 2>&1; then
+          CCACHE_DIR="$OPENWRT_PATH/.ccache" ccache --show-stats || true
+        fi
 
     - name: Machine Information
       continue-on-error: true

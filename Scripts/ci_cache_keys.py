@@ -48,8 +48,9 @@ def toolchain_config_hash(path):
 
 
 def main():
-    # 镜像版本也参与隔离，避免升级 host 编译器/运行库后复用旧工具。
-    scope = {
+    # 工具链缓存需要和运行环境严格隔离；源码 commit 单独放在精确键的末尾，
+    # 这样恢复时可以在同一配置下回退到较早的源码缓存。
+    toolchain_scope = {
         name: required(name)
         for name in (
             "RUNNER_OS", "RUNNER_ARCH", "ImageOS", "ImageVersion",
@@ -57,18 +58,29 @@ def main():
         )
     }
     source_hash = required("REPO_GIT_HASH")
-    scripts_hash = required("CACHE_SCRIPTS_HASH")
     config = Path(required("OPENWRT_PATH")) / ".config"
     config_hash = toolchain_config_hash(config)
-    compatibility_hash = fingerprint({
-        **scope,
-        "source": source_hash,
-        "config": config_hash,
-        "scripts": scripts_hash,
-    })
-    print(f"TOOLCHAIN_CACHE_KEY=toolchain-v3-{compatibility_hash}")
-    # ccache 自行验证编译器、源码和参数，可在同一 scope 内跨提交复用。
-    print(f"CCACHE_CACHE_PREFIX=ccache-v2-{fingerprint(scope)}")
+    stable_scope = {
+        name: toolchain_scope[name]
+        for name in (
+            "RUNNER_OS", "RUNNER_ARCH", "ImageOS", "WRT_REPO_URL",
+            "WRT_REPO_BRANCH", "DEVICE_TARGET", "DEVICE_SUBTARGET",
+        )
+    }
+    stable_hash = fingerprint({**stable_scope, "config": config_hash})
+    image_hash = fingerprint({"ImageVersion": toolchain_scope["ImageVersion"]})[:16]
+    print(f"TOOLCHAIN_CACHE_KEY=toolchain-v4-{stable_hash}-{image_hash}-{source_hash}")
+    print(f"TOOLCHAIN_CACHE_RESTORE_KEY=toolchain-v4-{stable_hash}-")
+
+    # ccache 自行验证编译器、源码和参数；Runner 镜像升级不应让已有对象全部失效。
+    ccache_scope = {
+        name: toolchain_scope[name]
+        for name in (
+            "RUNNER_OS", "RUNNER_ARCH", "WRT_REPO_URL", "WRT_REPO_BRANCH",
+            "DEVICE_TARGET", "DEVICE_SUBTARGET",
+        )
+    }
+    print(f"CCACHE_CACHE_PREFIX=ccache-v3-{fingerprint(ccache_scope)}")
 
 
 if __name__ == "__main__":
