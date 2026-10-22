@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# setup_config hooks
+
+## subconverter 编译进固件时默认不自启，用户仍可在 LuCI 中手动启用。
+#if [ -x /etc/init.d/subconverter ]; then
+#    /etc/init.d/subconverter disable
+#    /etc/init.d/subconverter stop
+#fi
+
+exit 0

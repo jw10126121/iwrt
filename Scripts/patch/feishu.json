@@ -1,0 +1,42 @@
+{
+	"_api": "Feishu custom bot",
+	"_api": "【Feishu】",
+
+	"url": "\"${feishu_webhook}\"",
+	"data": "@${tempjsonpath}",
+	"content_type": "Content-Type: application/json",
+	"str_title_start": "**",
+	"str_title_end": "**",
+	"str_linefeed": "\\n",
+	"str_splitline": "\\n-----------------------------------\\n",
+	"str_space": " ",
+	"str_tab": " ",
+	"type": {
+		"timestamp": "\"${feishu_timestamp}\"",
+		"sign": "\"${feishu_sign}\"",
+		"msg_type": "\"interactive\"",
+		"card": {
+			"header": {
+				"title": { "tag": "\"plain_text\"", "content": "\"${1}\"" },
+				"template": "\"blue\""
+			},
+			"elements": [
+				{
+					"tag": "\"markdown\"",
+					"content": "\"🕐 **${nowtime}**\""
+				},
+				{
+					"tag": "\"markdown\"",
+					"content": "\"${2}\""
+				},
+        { "tag": "\"hr\"" },
+				{
+					"tag": "\"note\"",
+					"elements": [
+						{ "tag": "\"plain_text\"", "content": "\"📡 【Lin】\"" }
+					]
+				}
+			]
+		}
+	}
+}

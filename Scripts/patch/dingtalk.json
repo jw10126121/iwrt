@@ -1,0 +1,27 @@
+{
+	"_api": "【钉钉推送】",
+	"url": "\"${dingtalk_url}\"",
+    "data": "@${tempjsonpath}",
+    "content_type": "Content-Type:application/json",
+    "str_title_start": "**<font color=#6A65FF>",
+    "str_title_end": "**</font>",
+    "str_linefeed": "\\n",
+    "str_splitline": "\\n\\n---\\n\\n",
+    "str_space": " ",
+    "str_tab": " ",
+    "table_tab": "<font color=#76CCFF>┋</font>",
+    "font_green": "<font color=#92D050>",
+    "font_green2": "<font color=#92D050>",
+    "font_red": "<font color=#FF6666>",
+    "font_blue": "<font color=#76CCFF>",
+    "font_purple": "<font color=#6A65FF>",
+    "font_end": "</font>",
+    "type":
+      {
+	      "msgtype": "\"markdown\"",
+	      "markdown": {
+		    "title": "\"${1}\"",
+			"text": "\"**<font color=#6A65FF>${font_purple}${1}${font_end}**</font>${str_linefeed}${str_linefeed}${str_tab} - 时间：<font color=#92D050>${nowtime}</font>${str_linefeed}${font_purple}${2}${font_end}${str_splitline}\""
+	      }
+      }
+}
