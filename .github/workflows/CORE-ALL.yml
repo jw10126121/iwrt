@@ -83,7 +83,7 @@ on:
       WRT_FEED_HOST:
         required: false
         type: string
-        default: ''
+        default: 'openwrt-8e2.pages.dev'
     secrets:
       WEBHOOK_DINGDING:
         required: false

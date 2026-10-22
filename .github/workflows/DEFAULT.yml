@@ -44,7 +44,7 @@ on:
         description: 'APK 软件源主机域名'
         required: false
         type: string
-        default: ''
+        default: 'openwrt-8e2.pages.dev'
       WRT_DIY_SETTING:
         required: false
         type: string
@@ -152,7 +152,7 @@ on:
         description: 'APK 软件源主机域名'
         required: false
         type: string
-        default: ''
+        default: 'openwrt-8e2.pages.dev'
       WRT_DIY_SETTING:
         description: 'DIY 设置脚本'
         required: false

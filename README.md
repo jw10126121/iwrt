@@ -21,14 +21,14 @@ Lean 源码、fw3 防火墙和 IPK 包格式已不再支持。手动构建入口
 
 软件源自动收集最终 `.config` 中所有 `CONFIG_PACKAGE_*=m` 的包；将包配置为 `=m` 即可纳入软件源，`=y` 的固件内置包不会重复收集。成功构建后，Actions 会单独上传 `<构建名>-apk-feed` artifact，其中包含用户态 APK 索引和对应 target 的内核模块索引；内核模块目录同时带有 `vermagic`。
 
-如需让固件自动配置软件源，在 workflow 输入 `WRT_FEED_HOST` 填写静态托管的主机域名，例如 `feeds.example.net`。构建固件会写入：
+固件默认使用 [openwrt-8e2.pages.dev](https://openwrt-8e2.pages.dev/) 作为 APK 软件源主机域名；也可通过 workflow 输入 `WRT_FEED_HOST` 覆盖。构建固件会写入：
 
 ```text
-https://<源码短哈希>.feeds.example.net/packages/<架构>/packages.adb
-https://<源码短哈希>.feeds.example.net/kmods/<子目标>/packages.adb
+https://<源码短哈希>.openwrt-8e2.pages.dev/packages/<架构>/packages.adb
+https://<源码短哈希>.openwrt-8e2.pages.dev/kmods/<子目标>/packages.adb
 ```
 
-将 artifact 中 `<源码短哈希>/` 下的目录内容发布到该短哈希对应的站点根目录。DNS/静态托管需将 `<源码短哈希>.feeds.example.net` 指向相应内容。未设置 `WRT_FEED_HOST` 时仍会生成软件源 artifact，但固件不会写入这两条自定义源。
+将 artifact 中 `<源码短哈希>/` 下的目录内容发布到对应主机的站点根目录，并确保 `<源码短哈希>.openwrt-8e2.pages.dev` 可访问这些路径。未修改默认值时固件会自动写入这两条自定义源。
 
 设备启动后可执行：
 
