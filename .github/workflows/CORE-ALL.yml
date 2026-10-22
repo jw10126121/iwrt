@@ -277,6 +277,12 @@ jobs:
         if [[ "$WRT_DEVICE" =~ (cmiot|jd-ax) ]]; then
           IS_QUALCOMMAX=true
         fi
+        # LibWrt 仅覆盖高通设备；非高通设备回退到官方 ImmortalWrt 时，元数据也使用实际源码风味。
+        if [ -z "${WRT_REPO_URL}" ] && [ "${SOURCE_TYPE}" = "libwrt" ] && [ "${IS_QUALCOMMAX}" != "true" ]; then
+          SOURCE_TYPE="vwrt"
+          echo "SOURCE_TYPE=$SOURCE_TYPE" >> "$GITHUB_ENV"
+          echo "【Lin】当前设备不属于高通平台，源码风味回退为 vwrt（官方 ImmortalWrt）"
+        fi
         if [ -n "${WRT_REPO_URL}" ]; then
           echo "【Lin】使用传入源码：[${WRT_REPO_BRANCH}] ${WRT_REPO_URL}"
         elif [ "${SOURCE_TYPE}" = "libwrt" ] && [ "${IS_QUALCOMMAX}" = "true" ]; then
