@@ -1,0 +1,286 @@
+#CI项目
+name: DEFAULT
+run-name: ${{ inputs.WRT_DEVICE }}-${{ inputs.SOURCE_TYPE }}-${{ inputs.WRT_FIREWALL == 'auto' && (inputs.SOURCE_TYPE == 'lean' && 'fw3' || 'fw4') || inputs.WRT_FIREWALL }}-${{ inputs.WRT_FRP_MODE }}-${{ inputs.WRT_USB_MODE == 'nousb' && 'nousb' || 'usb' }}-${{ inputs.WRT_PACKAGE_MANAGER == 'auto' && (inputs.SOURCE_TYPE == 'vwrt' && 'apk' || 'ipk') || inputs.WRT_PACKAGE_MANAGER }}${{ inputs.WRT_OVERLAYS != '' && format('-{0}', inputs.WRT_OVERLAYS) || '' }}
+
+on:
+  workflow_call:
+    inputs:
+      WRT_DEVICE:
+        required: true
+        type: string
+      SOURCE_TYPE:
+        required: false
+        type: string
+        default: 'lean'
+      WRT_FIREWALL:
+        required: false
+        type: string
+        default: 'auto'
+      WRT_FRP_MODE:
+        required: false
+        type: string
+        default: 'frpc'
+      WRT_USB_MODE:
+        required: false
+        type: string
+        default: 'default'
+      WRT_PACKAGE_MANAGER:
+        required: false
+        type: string
+        default: 'auto'
+      WRT_OVERLAYS:
+        required: false
+        type: string
+        default: ''
+      WRT_EXTRA_CONFIGS:
+        required: false
+        type: string
+        default: ''
+      WRT_LUCI_BRANCH:
+        required: false
+        type: string
+        default: ''
+      WRT_DIY_SETTING:
+        required: false
+        type: string
+        default: 'diy_config.sh'
+      WRT_DIYPackages:
+        required: false
+        type: string
+        default: 'auto'
+      WRT_DEFAULT_LANIP:
+        required: false
+        type: string
+        default: '192.168.0.1'
+      WRT_RELEASE_FIRMWARE:
+        required: false
+        type: boolean
+        default: true
+      WHAT_MY_SAY:
+        required: false
+        type: string
+        default: ''
+      WRT_SOURCE_HASH_INFO:
+        required: false
+        type: string
+        default: ''
+  #手动编译
+  workflow_dispatch:
+    inputs:
+      WRT_DEVICE:
+        description: '设备型号'
+        required: true
+        type: choice
+        options:
+          - cmiot-ax18-nowifi
+          - jd-ax1800pro-wifi
+          - jd-ax1800pro-nowifi
+          - jd-ax6600-wifi
+          - gl-mt6000-wifi
+          - gl-mt6000-nowifi
+        default: 'gl-mt6000-nowifi'
+      # 源码类型：vwrt = immortalwrt，lean = coolsnowwolf/lede，libwrt = LiBwrt/LibWrt
+      SOURCE_TYPE:
+        description: '源码类型'
+        required: false
+        type: choice
+        options:
+          - vwrt
+          - lean
+          - libwrt
+        default: 'libwrt'
+      # 防火墙栈：- auto = lean -> fw3，vwrt/libwrt -> fw4，- fw3 / fw4 = 手动指定
+      WRT_FIREWALL:
+        description: '防火墙栈'
+        required: false
+        type: choice
+        options:
+          - auto
+          - fw3
+          - fw4
+        default: 'auto'
+      # FRP 模式：- frpc = 客户端，- frps = 服务端，- frp = 同时启用 frpc 与 frps，- none = 不额外追加 FRP overlay
+      WRT_FRP_MODE:
+        description: 'FRP 模式'
+        required: false
+        type: choice
+        options:
+          - frpc
+          - frps
+          - frp
+          - none
+        default: 'frpc'
+      # USB 模式：- default = 保持设备默认，- usb / nousb = 显式覆盖
+      WRT_USB_MODE:
+        description: 'USB 模式'
+        required: false
+        type: choice
+        options:
+          - default
+          - usb
+          - nousb
+        default: 'default'
+      # 包管理器：- auto = 按源码默认选择，- apk / ipk = 显式指定
+      WRT_PACKAGE_MANAGER:
+        description: '包管理器'
+        required: false
+        type: choice
+        options:
+          - auto
+          - apk
+          - ipk
+        default: 'auto'
+      # 高级兜底 overlays：- 逗号分隔，- 会追加在结构化选项之后
+      WRT_OVERLAYS:
+        description: '高级 overlays'
+        required: false
+        type: string
+        default: ''
+      # 临时附加配置：- 支持 luci-app-mmw，- 支持 luci-app-mmw=y，- 支持 CONFIG_PACKAGE_xxx=y，- 支持空格、逗号、中文逗号、换行分隔
+      WRT_EXTRA_CONFIGS:
+        description: '临时附加配置'
+        required: false
+        type: string
+        default: ''
+      # LuCI feed 分支：- 例如 openwrt-23.05 / 23.05 / 2305
+      WRT_LUCI_BRANCH:
+        description: 'LuCI 分支'
+        required: false
+        type: string
+        default: ''
+      WRT_DIY_SETTING:
+        description: 'DIY 设置脚本'
+        required: false
+        type: string
+        default: 'diy_config.sh'
+      WRT_DIYPackages:
+        description: 'DIY 包脚本'
+        required: false
+        type: string
+        default: 'auto'
+      WRT_DEFAULT_LANIP:
+        description: '默认 LAN IP'
+        required: false
+        type: string
+        default: '192.168.0.1'
+      WRT_RELEASE_FIRMWARE:
+        description: '发布固件'
+        required: false
+        type: boolean
+        default: false
+      WHAT_MY_SAY:
+        description: '编译说明'
+        required: false
+        type: string
+        default: ''
+      # 源码 HASH：
+      # - 可选填写 commit hash
+      WRT_SOURCE_HASH_INFO:
+        description: '源码 HASH'
+        required: false
+        type: string
+        default: ''
+
+#CI权限
+permissions: write-all
+
+#CI任务
+jobs:
+  # 预解析：根据 SOURCE_TYPE 解析 auto 为实际值
+  resolve:
+    name: 解析配置
+    runs-on: ubuntu-22.04
+    outputs:
+      firewall: ${{ steps.resolve.outputs.firewall }}
+      package_manager: ${{ steps.resolve.outputs.package_manager }}
+      frp_mode: ${{ steps.resolve.outputs.frp_mode }}
+      usb_mode: ${{ steps.resolve.outputs.usb_mode }}
+      usb_label: ${{ steps.resolve.outputs.usb_label }}
+    steps:
+      - name: Resolve auto values
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source_type="${{ inputs.SOURCE_TYPE }}"
+          firewall="${{ inputs.WRT_FIREWALL }}"
+          package_manager_input="${{ inputs.WRT_PACKAGE_MANAGER }}"
+          resolved_package_manager="$package_manager_input"
+          frp_mode="${{ inputs.WRT_FRP_MODE }}"
+          usb_mode="${{ inputs.WRT_USB_MODE }}"
+          usb_label='usb'
+
+          # 配置防火墙版本：vwrt → fw4 / apk，libwrt → fw4 / ipk，lean → fw3 / ipk
+          if [ "$firewall" = "auto" ]; then
+            if [ "$source_type" = "vwrt" ] || [ "$source_type" = "libwrt" ]; then
+              firewall="fw4"
+            else
+              firewall="fw3"
+            fi
+          fi
+
+          # 配置包管理器：vwrt → apk，libwrt → ipk，lean → ipk
+          if [ "$package_manager_input" = "auto" ]; then
+            if [ "$source_type" = "vwrt" ]; then
+              resolved_package_manager="apk"
+            else
+              resolved_package_manager="ipk"
+            fi
+          fi
+
+          if [ "$usb_mode" = "nousb" ]; then
+            usb_label='nousb'
+          fi
+
+          echo "firewall=$firewall" >> $GITHUB_OUTPUT
+          echo "package_manager=$resolved_package_manager" >> $GITHUB_OUTPUT
+          echo "frp_mode=$frp_mode" >> "$GITHUB_OUTPUT"
+          echo "usb_mode=$usb_mode" >> "$GITHUB_OUTPUT"
+          echo "usb_label=$usb_label" >> "$GITHUB_OUTPUT"
+          echo "【Lin】源码类型：${source_type}"
+          echo "【Lin】FRP 模式：${frp_mode:-none}"
+          echo "【Lin】USB 模式：${usb_mode:-default}（标签：${usb_label}）"
+          echo "【Lin】解析结果：fw=${firewall}, pkg=${resolved_package_manager}"
+
+  config:
+    needs: resolve
+    name: ${{ inputs.WRT_DEVICE }}-${{ needs.resolve.outputs.firewall }}-${{ needs.resolve.outputs.frp_mode }}-${{ needs.resolve.outputs.usb_label }}-${{ needs.resolve.outputs.package_manager }}${{ inputs.WRT_OVERLAYS != '' && format('-{0}', inputs.WRT_OVERLAYS) || '' }}
+    # 调用公用编译核心ALL-CORE.yml
+    uses: ./.github/workflows/CORE-ALL.yml
+    with:
+      # 参数化配置
+      WRT_DEVICE: ${{ inputs.WRT_DEVICE }}
+      # 源码类型：vwrt / lean / libwrt
+      SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
+      # 指定源码HASH信息，默认空
+      WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      # 防火墙栈：fw3 或 fw4，从SOURCE_TYPE获取
+      WRT_FIREWALL: ${{ needs.resolve.outputs.firewall }}
+      # 包管理器：apk 或 ipk，从SOURCE_TYPE获取
+      WRT_PACKAGE_MANAGER: ${{ needs.resolve.outputs.package_manager }}
+      # FRP 模式：结构化参数透传给 CORE-ALL
+      WRT_FRP_MODE: ${{ needs.resolve.outputs.frp_mode }}
+      # USB 模式：结构化参数透传给 CORE-ALL
+      WRT_USB_MODE: ${{ needs.resolve.outputs.usb_mode }}
+      # overlays，例如 frps
+      WRT_OVERLAYS: ${{ inputs.WRT_OVERLAYS }}
+      # 临时附加配置，例如 luci-app-mmw=y
+      WRT_EXTRA_CONFIGS: ${{ inputs.WRT_EXTRA_CONFIGS }}
+      # LuCI feed 分支，例如 openwrt-23.05、23.05 或 2305
+      WRT_LUCI_BRANCH: ${{ inputs.WRT_LUCI_BRANCH }}
+      # DIY脚本，会自动判断源码进行处理
+      WRT_DIY_SETTING: ${{ inputs.WRT_DIY_SETTING }}
+      # DIY包配置，会自动判断源码进行处理
+      WRT_DIYPackages: ${{ inputs.WRT_DIYPackages }}
+      # FEED配置
+      WRT_DIY_FEEDS: diy_feeds.sh
+      # 是否发布
+      WRT_RELEASE_FIRMWARE: ${{ inputs.WRT_RELEASE_FIRMWARE }}
+      # 默认LAN-IP
+      WRT_DEFAULT_LANIP: ${{ inputs.WRT_DEFAULT_LANIP }}
+      # 编译说明
+      WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
+    secrets:
+      WEBHOOK_DINGDING: ${{ secrets.WEBHOOK_DINGDING }}
+      WEBHOOK_FEISHU: ${{ secrets.WEBHOOK_FEISHU }}

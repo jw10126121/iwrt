@@ -1,0 +1,98 @@
+#CI项目
+name: ForCache
+run-name: ForCache-${{ (github.event_name == 'workflow_dispatch' && inputs.WRT_RELEASE_FIRMWARE) && 'release' || 'test' }}
+
+#CI计划
+on:
+  # schedule:
+  #   - cron: '0 3 * * 5'  # 每周五 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      WHAT_MY_SAY:
+        description: '编译说明'
+        required: false
+        type: string
+        default: ''
+      WRT_RELEASE_FIRMWARE:
+        description: '是否发布'
+        required: false
+        type: boolean
+        default: false
+      WRT_SOURCE_HASH_INFO:
+        description: '源码 HASH，可选填写 commit hash'
+        required: false
+        type: string
+        default: ''
+
+#CI权限
+permissions: write-all
+
+#CI任务
+jobs:
+  cmiot_ax18_nowifi_fw3:
+    name: cmiot-ax18-nowifi-fw3-base
+    uses: ./.github/workflows/CORE-ALL.yml
+    with:
+      WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_DEVICE: cmiot-ax18-nowifi
+      SOURCE_TYPE: 'lean'
+      WRT_FIREWALL: auto
+      WRT_OVERLAYS: ''
+      WRT_DIY_SETTING: diy_config.sh
+      WRT_DIYPackages: Packages.sh
+      WRT_DIY_FEEDS: diy_feeds.sh
+      WRT_DEFAULT_LANIP: 192.168.0.1
+      WRT_RELEASE_FIRMWARE: ${{ github.event_name == 'workflow_dispatch' && inputs.WRT_RELEASE_FIRMWARE }}
+      WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
+    secrets: inherit
+
+  gl_mt6000_wifi_fw3:
+    name: gl-mt6000-wifi-fw3-base
+    uses: ./.github/workflows/CORE-ALL.yml
+    with:
+      WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_DEVICE: gl-mt6000-wifi
+      SOURCE_TYPE: 'lean'
+      WRT_FIREWALL: auto
+      WRT_OVERLAYS: ''
+      WRT_DIY_SETTING: diy_config.sh
+      WRT_DIYPackages: Packages.sh
+      WRT_DIY_FEEDS: diy_feeds.sh
+      WRT_DEFAULT_LANIP: 192.168.0.1
+      WRT_RELEASE_FIRMWARE: ${{ github.event_name == 'workflow_dispatch' && inputs.WRT_RELEASE_FIRMWARE }}
+      WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
+    secrets: inherit
+
+  cmiot_ax18_nowifi_fw4:
+    name: cmiot-ax18-nowifi-fw4-base
+    uses: ./.github/workflows/CORE-ALL.yml
+    with:
+      WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_DEVICE: cmiot-ax18-nowifi
+      SOURCE_TYPE: 'vwrt'
+      WRT_FIREWALL: auto
+      WRT_OVERLAYS: ''
+      WRT_DIY_SETTING: diy_config.sh
+      WRT_DIYPackages: Packages.sh
+      WRT_DIY_FEEDS: diy_feeds.sh
+      WRT_DEFAULT_LANIP: 192.168.0.1
+      WRT_RELEASE_FIRMWARE: ${{ github.event_name == 'workflow_dispatch' && inputs.WRT_RELEASE_FIRMWARE }}
+      WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
+    secrets: inherit
+
+  gl_mt6000_wifi_fw4:
+    name: gl-mt6000-wifi-fw4-base
+    uses: ./.github/workflows/CORE-ALL.yml
+    with:
+      WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_DEVICE: gl-mt6000-wifi
+      SOURCE_TYPE: 'vwrt'
+      WRT_FIREWALL: auto
+      WRT_OVERLAYS: ''
+      WRT_DIY_SETTING: diy_config.sh
+      WRT_DIYPackages: Packages.sh
+      WRT_DIY_FEEDS: diy_feeds.sh
+      WRT_DEFAULT_LANIP: 192.168.0.1
+      WRT_RELEASE_FIRMWARE: ${{ github.event_name == 'workflow_dispatch' && inputs.WRT_RELEASE_FIRMWARE }}
+      WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
+    secrets: inherit
