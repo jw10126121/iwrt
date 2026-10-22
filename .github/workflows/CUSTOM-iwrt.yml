@@ -23,6 +23,11 @@ on:
         required: false
         type: string
         default: '20edd8312f4f307c882f8861f7050ee8da555f24' # '20edd8312f4f307c882f8861f7050ee8da555f24' #'9e08f0c3cf44c6681d7f9b7730adf3fad8db62a5'
+      WRT_FEED_HOST:
+        description: 'APK 软件源主机域名'
+        required: false
+        type: string
+        default: 'lin-iwrt.pages.dev'
 
 #CI权限
 permissions: write-all
@@ -34,6 +39,7 @@ jobs:
   #   uses: ./.github/workflows/CORE-ALL.yml
   #   with:
   #     WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+  #     WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
   #     WRT_DEVICE: cmiot-ax18-nowifi
   #     SOURCE_TYPE: 'vwrt'
   #     WRT_FIREWALL: fw4
@@ -51,6 +57,7 @@ jobs:
     uses: ./.github/workflows/CORE-ALL.yml
     with:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: cmiot-ax18-nowifi
       SOURCE_TYPE: 'vwrt'
       WRT_FIREWALL: fw4
@@ -68,6 +75,7 @@ jobs:
     uses: ./.github/workflows/CORE-ALL.yml
     with:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: gl-mt6000-nowifi
       SOURCE_TYPE: 'vwrt'
       WRT_FIREWALL: fw4
@@ -85,6 +93,7 @@ jobs:
   #   uses: ./.github/workflows/CORE-ALL.yml
   #   with:
   #     WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+  #     WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
   #     WRT_DEVICE: gl-mt6000-wifi
   #     SOURCE_TYPE: 'vwrt'
   #     WRT_FIREWALL: fw4
@@ -102,6 +111,7 @@ jobs:
     uses: ./.github/workflows/CORE-ALL.yml
     with:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: jd-ax6600-wifi
       SOURCE_TYPE: 'vwrt'
       WRT_FIREWALL: fw4

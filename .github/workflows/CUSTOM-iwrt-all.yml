@@ -31,6 +31,11 @@ on:
         required: false
         type: string
         default: ''
+      WRT_FEED_HOST:
+        description: 'APK 软件源主机域名'
+        required: false
+        type: string
+        default: 'lin-iwrt.pages.dev'
 
 #CI权限
 permissions: write-all
@@ -43,6 +48,7 @@ jobs:
   #   uses: ./.github/workflows/CORE-ALL.yml
   #   with:
   #     WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+  #     WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
   #     WRT_DEVICE: cmiot-ax18-nowifi
   #     SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
   #     WRT_PACKAGE_MANAGER: apk
@@ -61,6 +67,7 @@ jobs:
     uses: ./.github/workflows/CORE-ALL.yml
     with:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: cmiot-ax18-nowifi
       SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
       WRT_PACKAGE_MANAGER: apk
@@ -79,6 +86,7 @@ jobs:
     uses: ./.github/workflows/CORE-ALL.yml
     with:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: gl-mt6000-nowifi
       SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
       WRT_PACKAGE_MANAGER: apk
@@ -97,6 +105,7 @@ jobs:
     uses: ./.github/workflows/CORE-ALL.yml
     with:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: gl-mt6000-wifi
       SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
       WRT_PACKAGE_MANAGER: apk
@@ -115,6 +124,7 @@ jobs:
     uses: ./.github/workflows/CORE-ALL.yml
     with:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: jd-ax6600-wifi
       SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
       WRT_PACKAGE_MANAGER: apk
