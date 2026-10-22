@@ -44,7 +44,7 @@ on:
         description: 'APK 软件源主机域名'
         required: false
         type: string
-        default: 'openwrt-8e2.pages.dev'
+        default: 'lin-iwrt.pages.dev'
       WRT_DIY_SETTING:
         required: false
         type: string
@@ -69,6 +69,15 @@ on:
         required: false
         type: string
         default: ''
+    secrets:
+      WEBHOOK_DINGDING:
+        required: false
+      WEBHOOK_FEISHU:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+      CLOUDFLARE_API_TOKEN:
+        required: false
   #手动编译
   workflow_dispatch:
     inputs:
@@ -152,7 +161,7 @@ on:
         description: 'APK 软件源主机域名'
         required: false
         type: string
-        default: 'openwrt-8e2.pages.dev'
+        default: 'lin-iwrt.pages.dev'
       WRT_DIY_SETTING:
         description: 'DIY 设置脚本'
         required: false
@@ -276,3 +285,5 @@ jobs:
     secrets:
       WEBHOOK_DINGDING: ${{ secrets.WEBHOOK_DINGDING }}
       WEBHOOK_FEISHU: ${{ secrets.WEBHOOK_FEISHU }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

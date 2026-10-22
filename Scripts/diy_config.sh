@@ -275,14 +275,14 @@ configure_common_system_defaults() {
 }
 
 # 解析默认 LuCI 主题。
-# 自动选择时使用 aurora 主题。
+# 自动选择时使用 Aurora 主题。
 resolve_default_theme() {
     case "$WRT_THEME" in
         '')
             printf '%s\n' ''
             ;;
         auto)
-            printf '%s\n' 'fluent'
+            printf '%s\n' 'aurora'
             ;;
         *)
             printf '%s\n' "$WRT_THEME"

@@ -39,7 +39,7 @@ show_help() {
   SOURCE_TYPE            源码类型，默认 auto；支持 vwrt、libwrt
 
 本地辅助参数：
-  WRT_THEME_NAME         默认 auto（默认使用 aurora）
+  WRT_THEME_NAME         默认 auto（默认使用 Aurora）
   IS_RESET_PASSWORD      默认 true
   LOCAL_SKIP_MENUCONFIG  true 时跳过 make menuconfig，默认 false
 EOF

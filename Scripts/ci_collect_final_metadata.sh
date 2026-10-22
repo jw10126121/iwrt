@@ -167,6 +167,11 @@ extract_default_theme() {
     local builtin_theme
     local requested_theme=${WRT_THEME_NAME:-}
 
+    if [ "${requested_theme}" = 'auto' ]; then
+        printf '%s\n' 'aurora'
+        return 0
+    fi
+
     builtin_theme="$(
         grep '^CONFIG_PACKAGE_luci-theme-.*=y$' "${config_path}" 2>/dev/null | \
             grep -v '_INCLUDE_' | \

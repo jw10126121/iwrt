@@ -21,14 +21,14 @@ Lean 源码、fw3 防火墙和 IPK 包格式已不再支持。手动构建入口
 
 软件源自动收集最终 `.config` 中所有 `CONFIG_PACKAGE_*=m` 的包；将包配置为 `=m` 即可纳入软件源，`=y` 的固件内置包不会重复收集。成功构建后，Actions 会单独上传 `<构建名>-apk-feed` artifact，其中包含用户态 APK 索引和对应 target 的内核模块索引；内核模块目录同时带有 `vermagic`。
 
-固件默认使用 [openwrt-8e2.pages.dev](https://openwrt-8e2.pages.dev/) 作为 APK 软件源主机域名；也可通过 workflow 输入 `WRT_FEED_HOST` 覆盖。构建固件会写入：
+固件使用工作流输入 `WRT_FEED_HOST` 指定的 APK 软件源主机域名。构建成功后，Actions 会把对应源码短哈希目录自动部署到 Cloudflare Pages 的同名项目分支，并同时上传 `<构建名>-apk-feed` artifact。仓库需配置 `CLOUDFLARE_ACCOUNT_ID` 与 `CLOUDFLARE_API_TOKEN` 两项 Actions secrets；缺少任一项时会跳过 Pages 发布并在日志中说明。
 
 ```text
-https://<源码短哈希>.openwrt-8e2.pages.dev/packages/<架构>/packages.adb
-https://<源码短哈希>.openwrt-8e2.pages.dev/kmods/<子目标>/packages.adb
+https://<源码短哈希>.<软件源域名>/packages/<架构>/packages.adb
+https://<源码短哈希>.<软件源域名>/kmods/<子目标>/packages.adb
 ```
 
-将 artifact 中 `<源码短哈希>/` 下的目录内容发布到对应主机的站点根目录，并确保 `<源码短哈希>.openwrt-8e2.pages.dev` 可访问这些路径。未修改默认值时固件会自动写入这两条自定义源。
+自动部署后，应能通过 `<源码短哈希>.<软件源域名>` 访问这些路径。未修改 `WRT_FEED_HOST` 时，固件会使用工作流默认主机域名写入这两条自定义源。
 
 设备启动后可执行：
 
