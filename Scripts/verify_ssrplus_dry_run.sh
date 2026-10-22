@@ -2,7 +2,7 @@
 
 # 说明：
 # 1. 对 luci-app-ssr-plus 的“分包整理结果”做一次离线干跑验证。
-# 2. 通过解析 ipk/apk 控制信息，检查 SSR Plus 目录内是否已包含直接依赖。
+# 2. 通过解析 apk 控制信息，检查 SSR Plus 目录内是否已包含直接依赖。
 
 set -eu
 
@@ -39,7 +39,7 @@ mkdir -p "$STAGE_DIR"
 : > "$MISSING_DEPS"
 
 extract_control() {
-	# ipk/apk 都会带 control 元数据，后续依赖分析统一从这里提取。
+	# apk 都会带 control 元数据，后续依赖分析统一从这里提取。
 	local package_path=$1
 	tar -xOf "$package_path" ./control.tar.gz 2>/dev/null | tar -xzO ./control 2>/dev/null
 }
@@ -90,11 +90,11 @@ EOF
 $(normalize_dep_list "$depends_line")
 EOF
 done <<EOF
-$(find "$SOURCE_DIR" -type f \( -name '*.ipk' -o -name '*.apk' \) | sort)
+$(find "$SOURCE_DIR" -type f -name '*.apk' | sort)
 EOF
 
 SOURCE_COUNT=$(wc -l < "$PACKAGE_MAP" | tr -d ' ')
-[ "$SOURCE_COUNT" -eq 0 ] && echo "No .ipk or .apk files found under: $SOURCE_DIR" >&2 && exit 1
+[ "$SOURCE_COUNT" -eq 0 ] && echo "No .apk files found under: $SOURCE_DIR" >&2 && exit 1
 
 # 先复用正式整理脚本生成 ssr-plus 目录，再校验依赖闭包是否齐全。
 bash "$ORGANIZE_SCRIPT" "$STAGE_DIR" >/dev/null

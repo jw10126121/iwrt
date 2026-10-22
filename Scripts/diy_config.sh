@@ -38,7 +38,7 @@ show_help() {
     echo "  -n default_name       设置主机名，默认Linjw"
     echo "  -p is_reset_password  是否重置密码，默认true"
     echo "  -t default_theme_name 默认主题，默认不修改"
-    echo "  -m package_manager    包管理器类型，默认ipk，可选apk"
+    echo "  -m package_manager    包管理器固定使用 apk"
     echo "  -c config_name        配置名，如ipq60xx-nowifi-iwrt"
     echo "  -s wifi_ssid          WiFi名称（iwrt配置族专用）"
     echo "  -w wifi_password      WiFi密码，none表示开放WiFi（iwrt配置族专用）"
@@ -51,13 +51,13 @@ default_name="Linjw"
 default_ip="192.168.0.1"
 is_reset_password=true
 default_theme_name=''
-package_manager='ipk'
+package_manager='apk'
 config_name=''
 WRT_SSID="${WRT_WIFI_SSID:-OpenwrtAP}"
 WRT_WORD="${WRT_WIFI_PASSWORD:-88886666}"
 
 # 解析外部传入的定制参数，后续所有修改都围绕这些参数展开。
-while getopts "hi:n:p:t:m:c:s:w:" opt; do
+while getopts "hi:n:p:t:c:s:w:" opt; do
     case $opt in
         h)
             show_help
@@ -68,9 +68,6 @@ while getopts "hi:n:p:t:m:c:s:w:" opt; do
             ;;
         i)
             default_ip=$OPTARG
-            ;;
-        m)
-            package_manager=$OPTARG
             ;;
         p)
             is_reset_password=$OPTARG
@@ -107,18 +104,16 @@ WRT_THEME=$default_theme_name
 
 # op配置文件
 op_config="./.config"
-# op.config_generate
+# OpenWrt config_generate
 CFG_FILE_OP="./package/base-files/files/bin/config_generate"
-# lean.config_generate
-CFG_FILE_LEDE="./package/base-files/luci2/bin/config_generate"
-# lean.默认配置文件，固件首次刷入后运行
-file_default_settings="./package/lean/default-settings/files/zzz-default-settings"
+# 上游首次启动配置文件（仅当源码实际提供时使用）
+file_default_settings=""
 # 通用首次开机脚本，落到 /etc/uci-defaults/99-setup_config
 file_setup_config="./package/base-files/files/etc/uci-defaults/99-setup_config"
 setup_config_template="${current_script_dir}/patch/99-setup_config.txt"
 target_label_marker_file="./.linjw-target-label"
 
-# 源码类型：根据 lean 特有文件自动判断；非 lean 统一按 iwrt 配置族处理。
+# 源码类型：根据源码仓库信息识别类型，配置统一使用 iwrt 配置族。
 SOURCE_TYPE=$(resolve_source_type "${SOURCE_TYPE:-auto}" "$(pwd)")
 SOURCE_CONFIG_FAMILY=$(source_config_family "${SOURCE_TYPE}")
 echo "【Lin】源码类型：${SOURCE_TYPE}"
@@ -185,35 +180,22 @@ ensure_setup_config_script() {
 
 append_default_settings_snippet() {
     # 首次开机自定义逻辑统一写入 /etc/uci-defaults/99-setup_config，
-    # 避免继续把运行时初始化片段塞进 lean 的 zzz-default-settings。
+    # 运行时初始化逻辑统一写入 uci-defaults 脚本。
     ensure_setup_config_script
     append_file_snippet "$file_setup_config" "# setup_config hooks" "$2" "$3"
 }
 
-# 配置包管理器类型（ipk 或 apk）。
-# 根据 package_manager 参数设置对应的 CONFIG 选项，
-# 启用对应的 LuCI 包管理器界面并禁用另一个。
+# 统一启用 APK 包管理器，并禁用 opkg 及其 LuCI 界面。
 configure_package_manager_mode() {
-    if [ "${package_manager}" = 'apk' ]; then
-        set_kconfig_value "CONFIG_PKG_FORMAT" "apk"
-        set_kconfig_value "CONFIG_USE_APK" "y"
-        set_kconfig_value "CONFIG_PACKAGE_opkg" "n"
-        set_kconfig_value "CONFIG_PACKAGE_luci-app-package-manager" "y"
-        set_kconfig_value "CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn" "y"
-        set_kconfig_value "CONFIG_PACKAGE_luci-app-opkg" "n"
-        set_kconfig_value "CONFIG_PACKAGE_luci-lib-ipkg" "n"
-        set_kconfig_value "CONFIG_PACKAGE_luci-i18n-opkg-zh-cn" "n"
-        echo "【Lin】包管理器模式：apk（启用新版 LuCI 包管理器）"
-    else
-        set_kconfig_value "CONFIG_PKG_FORMAT" "ipk"
-        set_kconfig_value "CONFIG_USE_APK" "n"
-        set_kconfig_value "CONFIG_PACKAGE_luci-app-package-manager" "n"
-        set_kconfig_value "CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn" "n"
-        set_kconfig_value "CONFIG_PACKAGE_luci-app-opkg" "y"
-        set_kconfig_value "CONFIG_PACKAGE_luci-lib-ipkg" "y"
-        set_kconfig_value "CONFIG_PACKAGE_luci-i18n-opkg-zh-cn" "y"
-        echo "【Lin】包管理器模式：ipk（保留旧版 LuCI 包管理器）"
-    fi
+    set_kconfig_value "CONFIG_PKG_FORMAT" "apk"
+    set_kconfig_value "CONFIG_USE_APK" "y"
+    set_kconfig_value "CONFIG_PACKAGE_opkg" "n"
+    set_kconfig_value "CONFIG_PACKAGE_luci-app-package-manager" "y"
+    set_kconfig_value "CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn" "y"
+    set_kconfig_value "CONFIG_PACKAGE_luci-app-opkg" "n"
+    set_kconfig_value "CONFIG_PACKAGE_luci-lib-ipkg" "n"
+    set_kconfig_value "CONFIG_PACKAGE_luci-i18n-opkg-zh-cn" "n"
+    echo "【Lin】包管理器模式：APK"
 }
 
 # 配置源码自带的 default-settings 包。
@@ -231,32 +213,21 @@ configure_source_default_settings_package() {
 }
 
 # 配置默认系统参数：IP、主机名、时区、时间格式。
-# 同时修改 OP 和 LEDE 两套 config_generate，并设置首次开机时区。
+# 修改基础系统默认值并设置首次开机时区。
 configure_default_system() {
     local timezone_snippet
 
     # 配置时间格式
-    if find ./package/lean/autocore/files -type f -name 'index.htm' 2>/dev/null | grep -q .; then
-        sed -i 's/os.date()/os.date("%Y-%m-%d %H:%M:%S")/g' ./package/lean/autocore/files/*/index.htm
-        echo "【Lin】修改默认时间格式如：$(date "+%Y-%m-%d %H:%M:%S")"
-    fi
+
 
     #配置主机名、时区、主机ip
     if [ -f "$CFG_FILE_OP" ]; then
-        # 配置IP(lean用)
+        # 配置默认 IP
         sed -i "s/192\.168\.[0-9]*\.[0-9]*/$WRT_IP/g" "$CFG_FILE_OP"
         sed -i "s/hostname='.*'/hostname='$WRT_NAME'/g" "$CFG_FILE_OP"
         sed -i "s/timezone='[^']*'/timezone='CST-8'/g" "$CFG_FILE_OP"
         sed -i "s/zonename='[^']*'/zonename='Asia\\/Shanghai'/g" "$CFG_FILE_OP"
         echo "【Lin】OP默认：IP: ${WRT_IP}，主机名：$WRT_NAME"
-    fi
-
-    if [ -f "$CFG_FILE_LEDE" ]; then
-        sed -i "s/192\.168\.[0-9]*\.[0-9]*/$WRT_IP/g" "$CFG_FILE_LEDE"
-        sed -i "s/hostname='.*'/hostname='$WRT_NAME'/g" "$CFG_FILE_LEDE"
-        sed -i "s/timezone='[^']*'/timezone='CST-8'/g" "$CFG_FILE_LEDE"
-        sed -i "s/zonename='[^']*'/zonename='Asia\\/Shanghai'/g" "$CFG_FILE_LEDE"
-        echo "【Lin】LEDE默认：IP: ${WRT_IP}，主机名：$WRT_NAME"
     fi
 
     # 配置IP(iwrt配置族用)
@@ -273,8 +244,7 @@ configure_default_system() {
         echo "【Lin】编译标识：${build_id}"
     fi
 
-    # lean 源码专用：设置默认时区
-    if [ "${SOURCE_TYPE}" = "lean" ]; then
+    # 设置默认时区
         local timezone_snippet
         timezone_snippet=$(cat <<'EOF'
 uci set system.@system[0].timezone='CST-8'
@@ -286,7 +256,6 @@ EOF
         if [ -f "$file_setup_config" ] && grep -qF "uci set system.@system[0].zonename='Asia/Shanghai'" "$file_setup_config"; then
             echo "【Lin】默认时区已设置为 Asia/Shanghai"
         fi
-    fi
 }
 
 # 配置通用系统默认值，串联所有基础配置函数。
@@ -306,18 +275,14 @@ configure_common_system_defaults() {
 }
 
 # 解析默认 LuCI 主题。
-# auto 表示按源码类型选择：lean 使用 aurora，其它源码使用 aurora。
+# 自动选择时使用 aurora 主题。
 resolve_default_theme() {
     case "$WRT_THEME" in
         '')
             printf '%s\n' ''
             ;;
         auto)
-            if [ "${SOURCE_TYPE}" = "lean" ]; then
-                printf '%s\n' 'fluent' # argon
-            else
-                printf '%s\n' 'fluent'
-            fi
+            printf '%s\n' 'fluent'
             ;;
         *)
             printf '%s\n' "$WRT_THEME"
@@ -377,39 +342,6 @@ EOF
     fi
 }
 
-# lean 源码专属的运行时定制。
-# 修改 LuCI 提交等待时间，配置 DHCP 顺序分配 IP 范围。
-apply_lean_runtime_customizations() {
-    local dhcp_ip_start=10
-    local dhcp_ip_end=254
-    local dhcp_ip_limit=$((dhcp_ip_end - dhcp_ip_start + 1))
-    local holdoff_snippet dhcp_snippet
-
-    [ -f "$file_default_settings" ] || return 0
-
-    holdoff_snippet=$(cat <<'EOF'
-uci set luci.apply.holdoff=3
-uci commit luci
-EOF
-)
-    append_default_settings_snippet "uci commit system" "uci set luci.apply.holdoff" "$holdoff_snippet"
-    if grep -qF "uci set luci.apply.holdoff" "$file_setup_config"; then
-        echo "【Lin】修改luci提交等待时间成功！"
-    fi
-
-    dhcp_snippet=$(cat <<EOF
-uci set dhcp.@dnsmasq[0].sequential_ip=1
-uci set dhcp.lan.start=${dhcp_ip_start}
-uci set dhcp.lan.limit=${dhcp_ip_limit}
-uci commit dhcp
-EOF
-)
-    append_default_settings_snippet "uci commit system" "uci set dhcp.@dnsmasq[0].sequential_ip=" "$dhcp_snippet"
-    if grep -qF 'uci set dhcp.@dnsmasq[0].sequential_ip=' "$file_setup_config"; then
-        echo "【Lin】设置DHCP顺序分配${dhcp_ip_start}~${dhcp_ip_end}的IP。"
-    fi
-}
-
 # 检测无 WiFi 配置标志。
 # 当配置名同时包含 "wifi" 和 "no"（如 CMIOT-AX18-NOWIFI）时，
 # 设置 WRT_WIFI="wifi-no"，供后续 DTS 调整等逻辑使用。
@@ -435,17 +367,13 @@ write_build_target_marker() {
 
 
 # 清空默认密码。
-# 如果 is_reset_password 为 true，则清除 shadow 文件和 lean default-settings 中的 root 密码。
+# 如果 is_reset_password 为 true，则清除 shadow 文件和 源码默认设置 中的 root 密码。
 clear_passwords() {
     if [[ -f "./package/base-files/files/etc/shadow" && "$is_reset_password" == "true" ]]; then
         sed -i 's/^root:.*:/root:::0:99999:7:::/' "./package/base-files/files/etc/shadow"
         echo "【Lin】密码已清空：./package/base-files/files/etc/shadow"
     fi
 
-    if [[ -f "${file_default_settings}" && "$is_reset_password" == "true" ]]; then
-        sed -i '/\/etc\/shadow$/{/root::0:0:99999:7:::/d;/root:::0:99999:7:::/d}' "${file_default_settings}"
-        echo "【Lin】LEAN配置密码已清空：${file_default_settings}"
-    fi
 }
 
 # iwrt 配置族源码专用：配置无线参数。
@@ -453,7 +381,7 @@ clear_passwords() {
 # 1. set-wireless.sh（旧格式）
 # 2. mac80211.uc（新格式）
 # 参数：WRT_SSID（WiFi名称）、WRT_WORD（WiFi密码，为空或none时保持开放WiFi）
-configure_wifi_vwrt() {
+configure_wifi_iwrt() {
     local wifi_sh wifi_uc
 
     wifi_sh=$(find ./target/linux/{mediatek/filogic,qualcommax}/base-files/etc/uci-defaults/ -type f -name "*set-wireless.sh" 2>/dev/null | head -1)
@@ -485,27 +413,6 @@ configure_wifi_vwrt() {
     fi
 }
 
-# lean 源码 WiFi 配置：修改 mac80211.sh 中的 SSID、密码、国家码
-# 参数：WRT_SSID（WiFi名称）、WRT_WORD（WiFi密码，为空或none时保持开放WiFi）
-configure_wifi_lean() {
-    local wifi_sh
-
-    wifi_sh=$(find ./package/kernel/mac80211/files/lib/wifi/ -type f -name "mac80211.sh" 2>/dev/null | head -1)
-
-    if [ -f "$wifi_sh" ]; then
-        sed -i "s/ssid='.*'/ssid='${WRT_SSID}'/g" "$wifi_sh"
-        sed -i "s/country='.*'/country='CN'/g" "$wifi_sh"
-        if [[ -n "${WRT_WORD}" && "${WRT_WORD}" != "none" ]]; then
-            sed -i "s/encryption='none'/encryption='psk2+ccmp'/g" "$wifi_sh"
-            sed -i "/ssid='${WRT_SSID}'/a\\\\t\\t\\tset wireless.default_radio\${devidx}.key='${WRT_WORD}'" "$wifi_sh"
-        fi
-        echo "【Lin】WiFi 配置已写入：${wifi_sh}"
-    else
-        echo "【Lin】未找到无线配置文件（mac80211.sh）"
-    fi
-}
-
-
 # 调整 LuCI 菜单位置。
 # 将 ttyd 移到系统菜单，upnp/nlbwmon 移到网络，hd-idle/alist/samba4 移到 NAS。
 adjust_luci_menu_positions() {
@@ -518,9 +425,6 @@ adjust_luci_menu_positions() {
         sed -i 's/services/nas/g' $(find ./feeds/luci/applications/luci-app-alist/root/usr/share/luci/menu.d/ -type f -name "luci-app-alist.json")
     fi
 
-    #if [ -f "$CFG_FILE_LEDE" ]; then
-    #    sed -i 's/services/nas/g' $(find ./feeds/luci/applications/luci-app-samba4/root/usr/share/luci/menu.d/ -type f -name "luci-app-samba4.json")
-    #fi
 }
 
 # 更新编译版本号。
@@ -550,51 +454,20 @@ update_build_revision() {
     fi
 }
 
-# 配置 NSS/ECM 连接数显示。
-# 修改 usage 脚本，在 CPU/NPU 使用率后显示 ECM 连接数。
-configure_nss_usage_display() {
-    local usage_file="./package/lean/autocore/files/arm/sbin/usage"
-
-    if [[ -f "${usage_file}" ]]; then
-        sed -i '/echo -n "CPU: ${cpu_usage}, NPU: ${npu_usage}"/c\
-            if [ -r "/sys/kernel/debug/ecm/ecm_db/connection_count_simple" ]; then\
-                connection_count=$(cat /sys/kernel/debug/ecm/ecm_db/connection_count_simple)\
-                echo -n "CPU: ${cpu_usage}, NPU: ${npu_usage}, ECM: ${connection_count}"\
-            else\
-                echo -n "CPU: ${cpu_usage}, NPU: ${npu_usage}"\
-            fi' "$usage_file"
-        echo "【Lin】配置NSS显示执行完成"
-    fi
-}
-
 # 配置 OpenVPN 默认参数。
-# 根据防火墙版本（fw3/fw4）添加 NAT 规则，修复默认网关地址和重复连接问题。
+# 为 fw4 添加 NAT 规则，修复默认网关地址和重复连接问题。
 configure_openvpn_defaults() {
     local wrt_ippart
-    local firewall_user_path="./package/network/config/firewall/files/firewall.user"
     local fw4_openvpn_nat_dir="./package/base-files/files/usr/share/nftables.d/chain-post/srcnat"
     local fw4_openvpn_nat_file="${fw4_openvpn_nat_dir}/99-openvpn-masq.nft"
-    local fw3_openvpn_nat_rule="iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o br-lan -j MASQUERADE"
 
     wrt_ippart=$(echo "$WRT_IP" | cut -d'.' -f1-3)
 
-    if grep -q '^CONFIG_PACKAGE_firewall=y$' "${op_config}" 2>/dev/null; then
-        rm -f "${fw4_openvpn_nat_file}"
-        if [ -f "${firewall_user_path}" ] && ! grep -Fq "${fw3_openvpn_nat_rule}" "${firewall_user_path}"; then
-            echo "${fw3_openvpn_nat_rule}" >> "${firewall_user_path}"
-            echo "【Lin】OpenVPN Server 已追加 FW3 iptables NAT 规则"
-        fi
-    elif grep -q '^CONFIG_PACKAGE_firewall4=y$' "${op_config}" 2>/dev/null; then
-        if [ -f "${firewall_user_path}" ]; then
-            sed -i "\|${fw3_openvpn_nat_rule}|d" "${firewall_user_path}"
-        fi
-
-        mkdir -p "${fw4_openvpn_nat_dir}"
-        cat > "${fw4_openvpn_nat_file}" <<'EOF'
+    mkdir -p "${fw4_openvpn_nat_dir}"
+    cat > "${fw4_openvpn_nat_file}" <<'EOF'
 ip saddr 10.8.0.0/24 oifname "br-lan" masquerade comment "OpenVPN server LAN NAT"
 EOF
-        echo "【Lin】OpenVPN Server 已生成 FW4 nftables NAT 规则"
-    fi
+    echo "【Lin】OpenVPN Server 已生成 FW4 nftables NAT 规则"
 
     if [ -f "./package/feeds/luci/luci-app-openvpn-server/root/etc/config/openvpn" ]; then
         echo "  option duplicate_cn '1'" >> ./package/feeds/luci/luci-app-openvpn-server/root/etc/config/openvpn
@@ -609,7 +482,7 @@ EOF
 configure_base_package_options() {
     # 编译后，软件源里，去掉helloworld在线源
     set_kconfig_value "CONFIG_FEED_helloworld" "n"
-    # 第三方 feed 仅用于编译，不加入固件的 APK/IPK 运行时软件源
+    # 第三方 feed 仅用于编译，不加入固件的 APK 运行时软件源
     set_kconfig_value "CONFIG_FEED_miaomiaowu" "n"
     set_kconfig_value "CONFIG_FEED_istore" "n"
     set_kconfig_value "CONFIG_FEED_sqm_scripts_nss" "n"
@@ -617,7 +490,7 @@ configure_base_package_options() {
     set_kconfig_value "CONFIG_PACKAGE_luci" "y"
     # 设置编译中文语言包
     set_kconfig_value "CONFIG_LUCI_LANG_zh_Hans" "y"
-    # 设置编译包管理器模式（ipk/apk）
+    # 设置 APK 包管理器模式
     configure_package_manager_mode
 }
 
@@ -631,23 +504,11 @@ main() {
 
     configure_common_system_defaults
 
-    # lean 源码专用：更新编译版本号、配置无线参数
-    if [ "${SOURCE_TYPE}" = "lean" ]; then
-        update_build_revision
-        apply_lean_runtime_customizations
-        configure_wifi_lean
-    fi
-
-    # iwrt 配置族源码专用：配置无线参数
-    if [ "${SOURCE_CONFIG_FAMILY}" = "iwrt" ]; then
-        configure_wifi_vwrt
-    fi
+    # 配置无线参数
+    configure_wifi_iwrt
 
     write_build_target_marker
 
-    if [ "${SOURCE_TYPE}" = "lean" ]; then
-        configure_nss_usage_display
-    fi
 }
 
 main

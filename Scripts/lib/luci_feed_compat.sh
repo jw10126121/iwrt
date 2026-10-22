@@ -55,8 +55,3 @@ resolve_luci_feed_branch() {
 is_luci_feed_25_12() {
 	[ "$(resolve_luci_feed_branch "${1:-./feeds.conf.default}")" = "openwrt-25.12" ]
 }
-
-# 保留 lean 侧旧函数名，内部仍复用统一判断，避免调用方重复改名。
-is_lean_luci_feed_25_12() {
-	is_luci_feed_25_12 "${1:-./feeds.conf.default}"
-}

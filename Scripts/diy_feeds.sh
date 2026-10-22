@@ -6,7 +6,7 @@
 #
 # 用途：
 # 1. 启用 feeds.conf.default 中默认注释掉的 helloworld feed。
-# 2. 按需切换 lean 源码使用的 LuCI feed 分支。
+# 2. 按需设置 LuCI feed 分支。
 # 3. 清理已停用的第三方 feed。
 
 set -eu

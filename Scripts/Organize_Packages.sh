@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 说明：
-# 1. 按手工维护的 PACKAGE_OVERRIDES 维度整理编译产出的 ipk/apk。
+# 1. 按手工维护的 PACKAGE_OVERRIDES 维度整理编译产出的 apk。
 # 2. 不再根据 .config 或外部生成规则自动补齐插件/主题分组。
 # 3. 输入目录会被直接复制与清理，适合在打包阶段使用。
 
@@ -57,12 +57,12 @@ UPDATE_PACKAGE_LIST() {
 
 	PACKAGE_DIRNAME="$ACTION_DIR/$PACKAGE_NAME"
 	mkdir -p "$PACKAGE_DIRNAME"
-	# 将同一功能需要的 ipk/apk 聚合到一个目录，便于上传与安装。
-	# ipk 用 _ 做版本分隔符，apk 用 -，用 [-_] 兼容两种命名。
+	# 将同一功能需要的 apk 聚合到一个目录，便于上传与安装。
+	# APK 使用连字符分隔包名和版本。
 	for pkg in $PACKAGE_PRE_LIST; do
 	    local find_name
 	    find_name=$(echo "$pkg" | sed 's/_$//')
-	    for ext in ipk apk; do
+	    for ext in apk; do
 	    	find "$ACTION_DIR" -name "${find_name}[-_]*.${ext}" 2>/dev/null -exec cp -r {} "$PACKAGE_DIRNAME" \;
 	    done
 	done
@@ -78,7 +78,7 @@ DELETE_PACKAGE_LIST() {
 	for pkg in $PACKAGE_PRE_LIST; do
 	    local find_name
 	    find_name=$(echo "$pkg" | sed 's/_$//')
-	    for ext in ipk apk; do
+	    for ext in apk; do
 	    	find "$ACTION_DIR" -maxdepth 1 -name "${find_name}[-_]*.$ext" 2>/dev/null -exec rm -rf {} \;
 	    done
 	done
@@ -92,10 +92,10 @@ ORGANIZE_USB_PACKAGES() {
 	local found_any=false
 	local pkg_pattern ext
 
-	for pkg_pattern in 'kmod-usb-*' 'kmod-usb2_*' 'kmod-usb3_*' 'usbutils_*'; do
+	for pkg_pattern in 'kmod-usb-*' 'kmod-usb2-*' 'kmod-usb3-*' 'usbutils-*'; do
 		local find_name
 		find_name=$(echo "$pkg_pattern" | sed 's/_$//')
-		for ext in ipk apk; do
+		for ext in apk; do
 			if find "$ACTION_DIR" -maxdepth 1 -name "${find_name}[-_]*.${ext}" | grep -q .; then
 				found_any=true
 				break
@@ -107,10 +107,10 @@ ORGANIZE_USB_PACKAGES() {
 
 	echo "【Lin】操作目录：${ACTION_DIR}，整理usb的安装包"
 	mkdir -p "$USB_DIRNAME"
-	for pkg_pattern in 'kmod-usb-*' 'kmod-usb2_*' 'kmod-usb3_*' 'usbutils_*'; do
+	for pkg_pattern in 'kmod-usb-*' 'kmod-usb2-*' 'kmod-usb3-*' 'usbutils-*'; do
 		local find_name
 		find_name=$(echo "$pkg_pattern" | sed 's/_$//')
-		for ext in ipk apk; do
+		for ext in apk; do
 			find "$ACTION_DIR" -maxdepth 1 -name "${find_name}[-_]*.${ext}" 2>/dev/null -exec mv -f {} "$USB_DIRNAME" \;
 		done
 	done
@@ -119,8 +119,6 @@ ORGANIZE_USB_PACKAGES() {
 ### --- 执行 --- ###
 
 # netspeedtest需要下载librespeed-go，但编译后，未发现librespeed-go，所以需要下载
-# https://mirrors.tencent.com/lede/releases/24.10.2/packages/aarch64_cortex-a53/packages/librespeed-go_1.1.5-r5_aarch64_cortex-a53.ipk
-
 ### --- 包列表定义 --- ###
 PACKAGE_OVERRIDES=$(cat <<'EOF'
 openclash|luci-app-openclash_ kmod-inet-diag_ coreutils-nohup_ libcap-bin_ libgmp10_ libruby libyaml_ ruby_ ruby-bigdecimal_ ruby-date_ ruby-digest_ ruby-enc_ ruby-forwardable_ ruby-pstore_ ruby-psych_ ruby-stringio_ ruby-strscan_ ruby-yaml_ unzip_ kmod-nft-tproxy_

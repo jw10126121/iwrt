@@ -79,7 +79,11 @@ on:
       WRT_PACKAGE_MANAGER:
         required: false
         type: string
-        default: 'auto'
+        default: 'apk'
+      WRT_FEED_HOST:
+        required: false
+        type: string
+        default: ''
     secrets:
       WEBHOOK_DINGDING:
         required: false
@@ -98,10 +102,10 @@ env:
   WEBHOOK_FEISHU: ${{ secrets.WEBHOOK_FEISHU }}
   WRT_SOURCE_HASH_INFO: ${{inputs.WRT_SOURCE_HASH_INFO}}
   WRT_DEVICE: ${{inputs.WRT_DEVICE}}                          # 设备名
-  SOURCE_TYPE: ${{inputs.SOURCE_TYPE}}                        # 源码类型 vwrt/lean/libwrt/auto
+  SOURCE_TYPE: ${{inputs.SOURCE_TYPE}}                        # 源码类型 vwrt/libwrt/auto
   WRT_REPO_URL: ${{ inputs.WRT_REPO_URL }}                    # 显式仓库优先于按设备推断
   WRT_REPO_BRANCH: ${{ inputs.WRT_REPO_BRANCH }}
-  WRT_FIREWALL: ${{inputs.WRT_FIREWALL}}                      # fw3 / fw4
+  WRT_FIREWALL: fw4                                      # 固定使用 fw4
   WRT_FRP_MODE: ${{inputs.WRT_FRP_MODE || 'none' }}
   WRT_USB_MODE: ${{inputs.WRT_USB_MODE || 'default' }}
   WRT_OVERLAYS: ${{inputs.WRT_OVERLAYS || '' }}               # 可选 overlays
@@ -125,7 +129,8 @@ env:
   FREE_UP_DISK: true                                          # 是否清理磁盘
   CACHE_TOOLCHAIN: true
   WRT_HAS_WIFI: true
-  WRT_PACKAGE_MANAGER: ${{ inputs.WRT_PACKAGE_MANAGER }}
+  WRT_PACKAGE_MANAGER: apk
+  WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
   INSTALL_LLVM: false                                        # 是否安装 LLVM/Clang 工具链，默认关闭
   OPENWRT_PATH: '/builder/openwrt'
   
@@ -134,7 +139,7 @@ permissions: write-all
 
 jobs:
   build:
-    name: ${{ inputs.WRT_DEVICE }}-${{ inputs.WRT_FIREWALL == 'auto' && (inputs.SOURCE_TYPE == 'lean' && 'fw3' || 'fw4') || inputs.WRT_FIREWALL }}-${{ inputs.WRT_PACKAGE_MANAGER == 'auto' && (inputs.SOURCE_TYPE == 'lean' && 'ipk' || 'apk') || inputs.WRT_PACKAGE_MANAGER }}-${{ inputs.WRT_OVERLAYS != '' && inputs.WRT_OVERLAYS || 'base' }}
+    name: ${{ inputs.WRT_DEVICE }}-fw4-apk-${{ inputs.WRT_OVERLAYS != '' && inputs.WRT_OVERLAYS || 'base' }}
     runs-on: ubuntu-24.04
     if: github.repository_owner == github.event.sender.login || github.event_name == 'schedule'
     steps:
@@ -274,9 +279,6 @@ jobs:
         fi
         if [ -n "${WRT_REPO_URL}" ]; then
           echo "【Lin】使用传入源码：[${WRT_REPO_BRANCH}] ${WRT_REPO_URL}"
-        elif [ "${SOURCE_TYPE}" = "lean" ]; then
-          WRT_REPO_URL="https://github.com/coolsnowwolf/lede"
-          WRT_REPO_BRANCH="master"
         elif [ "${SOURCE_TYPE}" = "libwrt" ] && [ "${IS_QUALCOMMAX}" = "true" ]; then
           # LibWrt 仅用于高通设备；MT6000 等非高通设备沿用 vwrt 的官方 ImmortalWrt 路径。
           WRT_REPO_URL="https://github.com/LiBwrt/LibWrt"
@@ -327,43 +329,20 @@ jobs:
         REPO_GIT_hash_simple=$(git log -1 --pretty=format:'%h')
         echo "REPO_GIT_HASH=$REPO_GIT_HASH" >> $GITHUB_ENV
         echo "REPO_GIT_hash_simple=$REPO_GIT_hash_simple" >> $GITHUB_ENV
+        echo "WRT_HASH=$REPO_GIT_hash_simple" >> $GITHUB_ENV
         echo "【Lin】GIT HASH：${REPO_GIT_HASH}，hash: ${REPO_GIT_hash_simple}"
+        bash "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/apk-tools.sh"
         VERSION_INFO=$(git show -s --date=short --format="作者: %an<br/>时间: %cd<br/>内容: %s<br/>hash: %H")
         echo "VERSION_INFO=$VERSION_INFO" >> $GITHUB_ENV
         # 源码类型：优先使用传入值，auto 时从源码目录检测
         if [ "${SOURCE_TYPE}" = "auto" ]; then
-          if [ -d "$OPENWRT_PATH/package/lean" ]; then
-            SOURCE_TYPE="lean"
-          else
-            SOURCE_TYPE="vwrt"
-          fi
+          SOURCE_TYPE="vwrt"
         fi
         echo "SOURCE_TYPE=$SOURCE_TYPE" >> $GITHUB_ENV
         echo "【Lin】源码类型：${SOURCE_TYPE}"
-        # 包管理器和防火墙：auto 时根据源码类型自动选择
-        # vwrt → fw4 / apk，libwrt → fw4 / ipk，lean → fw3 / ipk
-        WRT_PACKAGE_MANAGER="${{ inputs.WRT_PACKAGE_MANAGER }}"
-        WRT_FIREWALL="${{ inputs.WRT_FIREWALL }}"
-        if [ "${WRT_PACKAGE_MANAGER}" = "auto" ]; then
-          if [ "$SOURCE_TYPE" = "vwrt" ]; then
-            WRT_PACKAGE_MANAGER="apk"
-          else
-            WRT_PACKAGE_MANAGER="ipk"
-          fi
-        fi
-        # vwrt/libwrt 强制使用 fw4（nftables），不支持 fw3
-        if [ "$SOURCE_TYPE" = "vwrt" ] || [ "$SOURCE_TYPE" = "libwrt" ]; then
-          if [ "${WRT_FIREWALL}" = "fw3" ]; then
-            echo "【Lin】警告：${SOURCE_TYPE} 源码类型不支持 fw3，已自动切换为 fw4"
-            WRT_FIREWALL="fw4"
-          elif [ "${WRT_FIREWALL}" = "auto" ]; then
-            WRT_FIREWALL="fw4"
-          fi
-        else
-          if [ "${WRT_FIREWALL}" = "auto" ]; then
-            WRT_FIREWALL="fw3"
-          fi
-        fi
+        # 所有源码统一使用 APK 包管理器和 fw4 防火墙。
+        WRT_PACKAGE_MANAGER="apk"
+        WRT_FIREWALL="fw4"
         echo "WRT_PACKAGE_MANAGER=$WRT_PACKAGE_MANAGER" >> $GITHUB_ENV
         echo "WRT_FIREWALL=$WRT_FIREWALL" >> $GITHUB_ENV
         echo "【Lin】防火墙：${WRT_FIREWALL}，包管理器：${WRT_PACKAGE_MANAGER}"
@@ -439,7 +418,7 @@ jobs:
         # cp $GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/patch/custom_usage.txt $OPENWRT_PATH/custom_usage.txt
         if [ -e "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/$WRT_DIY_SETTING" ]; then
           echo "【Lin】加载自定义配置成功：$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/$WRT_DIY_SETTING"
-          bash "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/$WRT_DIY_SETTING" -n "Linjw" -i "${{env.WRT_DEFAULT_LANIP}}" -p "${{env.IS_RESET_PASSWORD}}" -t "${{env.WRT_THEME_NAME}}" -m "${{ env.WRT_PACKAGE_MANAGER }}" -c "${{ env.WRT_CONFIG_LABEL }}"
+          bash "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/$WRT_DIY_SETTING" -n "Linjw" -i "${{env.WRT_DEFAULT_LANIP}}" -p "${{env.IS_RESET_PASSWORD}}" -t "${{env.WRT_THEME_NAME}}" -c "${{ env.WRT_CONFIG_LABEL }}"
         else
           echo "【Lin】未找到DIY设置：$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/$WRT_DIY_SETTING"
         fi
@@ -475,6 +454,11 @@ jobs:
       run: |
         file_diy="$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/diy_after_defconfig.sh"
         [ -f "${file_diy}" ] && chmod +x "${file_diy}" && bash "${file_diy}"
+
+    - name: Configure APK Feed Repositories (配置固件软件源)
+      working-directory: ${{ env.OPENWRT_PATH }}
+      run: |
+        bash "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/apk_feed.sh" firmware
 
     - name: Read Variables (读取变量)
       working-directory: ${{ env.OPENWRT_PATH }}
@@ -534,7 +518,7 @@ jobs:
         echo "【Lin】LuCI版本：${LUCI_VERSION:-未知}"
         echo "【Lin】默认主题：${DEFAULT_THEME:-源码默认}"
         echo "【Lin】防火墙：$WRT_FIREWALL"
-        echo "【Lin】包管理器：${WRT_PACKAGE_MANAGER:-ipk}"
+        echo "【Lin】包管理器：${WRT_PACKAGE_MANAGER:-apk}"
         echo "【Lin】设备主配置：${RESOLVED_DEVICE_CONFIG_PATH:-未知}"
         echo "【Lin】通用配置：${RESOLVED_GENERAL_CONFIG_PATHS:-未知}"
         echo "【Lin】自动 overlays：${RESOLVED_AUTO_OVERLAYS:-无}"
@@ -661,6 +645,12 @@ jobs:
         echo "======================="
         
 
+    - name: Collect APK Feed (收集软件源安装包)
+      if: steps.finalize_compile.outputs.status == 'success'
+      working-directory: ${{ env.OPENWRT_PATH }}
+      run: |
+        bash "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/apk_feed.sh" collect
+
     - name: Organize Files (整理编译后的文件)
       id: organize
       if: steps.finalize_compile.outputs.status == 'success'
@@ -690,6 +680,14 @@ jobs:
           ${{ env.OPENWRT_PATH }}/upload/*
           !${{ env.OPENWRT_PATH }}/upload/*_Packages.zip
           !${{ env.OPENWRT_PATH }}/upload/*_Packages/**
+
+    - name: Upload APK Feed To Artifact (上传 APK 软件源)
+      if: steps.finalize_compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE_DIR == 'true'
+      uses: actions/upload-artifact@v6.0.0
+      with:
+        name: ${{ env.OUTPUT_NAME_PREFIX }}-apk-feed
+        path: ${{ github.workspace }}/feed-out/**
+        if-no-files-found: ignore
 
     - name: Upload Packages To Artifact (将 Packages 包单独上传到 Artifact)
       id: upload_packages_artifact

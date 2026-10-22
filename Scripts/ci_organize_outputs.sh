@@ -52,13 +52,13 @@ if [ -f ./seed.config ]; then
     cp -f ./seed.config "./upload/config_seed_${output_name_prefix}.txt"
 fi
 
-# 先把分散在 bin/ 下的所有 ipk/apk 收拢到最终 Packages 目录，再按功能重组。
+# 先把分散在 bin/ 下的所有 apk 收拢到最终 Packages 目录，再按功能重组。
 # Artifact 直接上传该目录，Release 则从该目录生成单层 ZIP，用户无需二次解压。
 packages_dir="./upload/${output_name_prefix}_Packages"
 packages_zip="./upload/${output_name_prefix}_Packages.zip"
 mkdir -p "${packages_dir}"
-find ./bin/packages/ -type f \( -name "*.ipk" -o -name "*.apk" \) -exec mv -f {} "${packages_dir}" \;
-find ./bin/targets/ -type f \( -name "*.ipk" -o -name "*.apk" \) -exec mv -f {} "${packages_dir}" \;
+find ./bin/packages/ -type f -name "*.apk" -exec mv -f {} "${packages_dir}" \;
+find ./bin/targets/ -type f -name "*.apk" -exec mv -f {} "${packages_dir}" \;
 find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
 find ./bin/targets/ -iregex ".*\(initramfs-uImage\).*" -exec rm -rf {} +
 find ./bin/targets/ -iregex ".*\(-imagebuilder-\).*" -exec rm -rf {} +

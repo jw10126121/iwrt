@@ -4,7 +4,7 @@
 #  使用说明：
 #  1. 此文件包含所有设备共用的基础依赖，内核模块和系统组件。
 #  2. 第三方插件请放在各设备专属配置文件中。
-#  3. 包管理器（apk/ipk）由 Settings.sh 根据 workflow 输入自动处理，不要在此文件设置。
+#  3. 包管理器统一由构建流程设置为 APK，不要在此文件中覆盖。
 
 
 # ------------------------------------------------------------------------
@@ -115,7 +115,6 @@ CONFIG_PACKAGE_kmod-netlink-diag=y         # Netlink 诊断
 CONFIG_PACKAGE_luci-base=y                 # LuCI 核心
 CONFIG_PACKAGE_luci-compat=y               # LuCI 兼容层
 CONFIG_PACKAGE_luci-lib-base=y             # LuCI 基础库
-CONFIG_PACKAGE_luci-lib-ipkg=y             # LuCI ipkg 包管理
 CONFIG_PACKAGE_luci-lua-runtime=y          # LuCI Lua 运行时
 CONFIG_PACKAGE_luci-proto-relay=y          # LuCI 中继协议
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 说明：
-# 1. 根据实际编译出的 ipk/apk 依赖关系，自动生成 Organize_Packages.sh 可消费的覆盖规则。
+# 1. 根据实际编译出的 apk 依赖关系，自动生成 Organize_Packages.sh 可消费的覆盖规则。
 # 2. 只为“主包 + 中文包”之外还存在额外依赖闭包的 luci 应用/主题生成规则，避免产出无意义目录。
 
 set -eu
@@ -28,7 +28,7 @@ OUTPUT_FILE=${OUTPUT_PATH:-$TMPDIR/generated_overrides.txt}
 : > "$OUTPUT_FILE"
 
 extract_control() {
-	# 从 ipk/apk 中抽取 control 文件，统一复用给包名 / depends / provides 解析。
+	# 从 apk 中抽取 control 文件，统一复用给包名 / depends / provides 解析。
 	local package_path=$1
 	tar -xOf "$package_path" ./control.tar.gz 2>/dev/null | tar -xzO ./control 2>/dev/null
 }
@@ -135,7 +135,7 @@ EOF
 $(normalize_csv_list "$depends_line")
 EOF
 done <<EOF
-$(find "$PACKAGE_DIR" -maxdepth 1 -type f \( -name '*.ipk' -o -name '*.apk' \) | sort)
+$(find "$PACKAGE_DIR" -maxdepth 1 -type f -name '*.apk' | sort)
 EOF
 
 # 对每个已启用的 luci-app / luci-theme 做一次广度优先依赖展开。

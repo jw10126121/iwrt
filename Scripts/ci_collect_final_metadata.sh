@@ -188,31 +188,7 @@ extract_default_theme() {
 }
 
 extract_package_manager() {
-    local config_path=$1
-    local config_format
-    local requested_manager=${WRT_PACKAGE_MANAGER:-}
-
-    config_format="$(sed -n 's/^CONFIG_PKG_FORMAT=\([^"]*\)$/\1/p' "${config_path}" | head -n1 || true)"
-    case "${config_format}" in
-        apk|ipk)
-            printf '%s\n' "${config_format}"
-            return 0
-            ;;
-    esac
-
-    case "${requested_manager}" in
-        apk|ipk)
-            printf '%s\n' "${requested_manager}"
-            return 0
-            ;;
-    esac
-
-    if [ "${WRT_USE_APK:-false}" = "true" ]; then
-        printf '%s\n' 'apk'
-        return 0
-    fi
-
-    printf '%s\n' 'ipk'
+    printf '%s\n' 'apk'
 }
 
 openwrt_path="${OPENWRT_PATH:?OPENWRT_PATH is required}"
@@ -224,7 +200,7 @@ wrt_wifi_password="${WRT_WIFI_PASSWORD:-88886666}"
 wrt_repo_url="${WRT_REPO_URL:?WRT_REPO_URL is required}"
 wrt_repo_branch="${WRT_REPO_BRANCH:?WRT_REPO_BRANCH is required}"
 repo_git_hash="${REPO_GIT_HASH:-}"
-source_flavor="${SOURCE_TYPE:-lean}"
+source_flavor="${SOURCE_TYPE:-vwrt}"
 device_target="${DEVICE_TARGET:-}"
 device_subtarget="${DEVICE_SUBTARGET:-}"
 device_arch="$(sed -n 's/^CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)"/\1/p' "${openwrt_path}/.config" | head -n1 || true)"
@@ -237,8 +213,8 @@ logical_device_name="$(normalize_logical_device_name "${WRT_DEVICE:-}")"
 default_theme="$(extract_default_theme "${openwrt_path}/.config" || true)"
 wrt_has_lite_text='[常规版]'
 wrt_has_wifi_text='有WIFI'
-package_manager='ipk'
-package_manager_tag='ipk'
+package_manager='apk'
+package_manager_tag='apk'
 fw_stack='未知'
 fw_stack_tag='unknown'
 frp_role='未集成'
@@ -273,17 +249,8 @@ fi
 package_manager="$(extract_package_manager "${openwrt_path}/.config")"
 package_manager_tag="${package_manager}"
 
-if grep -q '^CONFIG_PACKAGE_firewall4=y$' "${openwrt_path}/.config" 2>/dev/null && \
-   grep -q '^CONFIG_PACKAGE_firewall=y$' "${openwrt_path}/.config" 2>/dev/null; then
-    fw_stack='fw3+fw4(冲突)'
-    fw_stack_tag='mixed'
-elif grep -q '^CONFIG_PACKAGE_firewall4=y$' "${openwrt_path}/.config" 2>/dev/null; then
-    fw_stack='fw4'
-    fw_stack_tag='fw4'
-elif grep -q '^CONFIG_PACKAGE_firewall=y$' "${openwrt_path}/.config" 2>/dev/null; then
-    fw_stack='fw3'
-    fw_stack_tag='fw3'
-fi
+fw_stack='fw4'
+fw_stack_tag='fw4'
 
 if grep -q '^CONFIG_PACKAGE_frpc=y$' "${openwrt_path}/.config" 2>/dev/null && \
    grep -q '^CONFIG_PACKAGE_frps=m$' "${openwrt_path}/.config" 2>/dev/null; then

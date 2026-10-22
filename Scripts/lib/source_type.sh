@@ -1,16 +1,12 @@
 #!/bin/sh
 
-# SOURCE_TYPE describes the selected upstream flavor; config family describes
-# which config set should be applied by this repository.
+# SOURCE_TYPE 描述当前使用的上游源码类型，配置统一使用 iwrt 配置集。
 
-# 归一化源码类型输入，兼容常见别名并输出仓库内部使用的标准值。
+# 归一化源码类型输入，兼容常见别名。
 normalize_source_type() {
 	local source_type=${1:-auto}
 
 	case "$source_type" in
-		lean|lede|lwrt)
-			printf '%s\n' 'lean'
-			;;
 		iwrt|vwrt|immortalwrt|vikingyfy)
 			printf '%s\n' 'vwrt'
 			;;
@@ -26,40 +22,30 @@ normalize_source_type() {
 	esac
 }
 
-# 根据源码类型选择配置家族，目前 lean 走 lean，其余统一走 iwrt 配置集。
+# 所有受支持源码都使用 iwrt 配置集。
 source_config_family() {
-	local source_type
-	source_type=$(normalize_source_type "${1:-auto}")
+	printf '%s\n' 'iwrt'
+}
 
-	case "$source_type" in
-		lean)
-			printf '%s\n' 'lean'
-			;;
-		*)
-			printf '%s\n' 'iwrt'
-			;;
+# 自动模式按源码仓库地址特征识别源码类型，未知来源归为 vwrt 配置族。
+detect_source_type_from_tree() {
+	local source_root=${1:-.}
+	local remote_url
+
+	remote_url=$(git -C "$source_root" config --get remote.origin.url 2>/dev/null || true)
+	case "$remote_url" in
+		*LiBwrt/LibWrt*) printf '%s\n' 'libwrt' ;;
+		*) printf '%s\n' 'vwrt' ;;
 	esac
 }
 
-# 在未显式指定时，根据源码树特征判断当前是 lean 还是 vwrt。
-detect_source_type_from_tree() {
-	local source_root=${1:-.}
-
-	if [ -f "$source_root/package/lean/default-settings/files/zzz-default-settings" ] || \
-		[ -f "$source_root/package/lean/default-settings/Makefile" ]; then
-		printf '%s\n' 'lean'
-	else
-		printf '%s\n' 'vwrt'
-	fi
-}
-
-# 综合用户输入与源码树探测结果，得到最终生效的源码类型。
+# 综合显式输入与源码仓库信息，得到最终源码类型。
 resolve_source_type() {
 	local requested_type
 	local source_root=${2:-.}
 	requested_type=$(normalize_source_type "${1:-auto}")
 
-	if [ "$requested_type" = "auto" ]; then
+	if [ "$requested_type" = 'auto' ]; then
 		detect_source_type_from_tree "$source_root"
 	else
 		printf '%s\n' "$requested_type"

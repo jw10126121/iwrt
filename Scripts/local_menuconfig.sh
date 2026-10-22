@@ -18,16 +18,16 @@ show_help() {
   WRT_DEVICE=cmiot-ax18-nowifi \
   WRT_FRP_MODE=frps \
   WRT_USB_MODE=usb \
-  WRT_PACKAGE_MANAGER=ipk \
+  WRT_PACKAGE_MANAGER=apk \
   bash Scripts/local_menuconfig.sh
 
 主要参数（尽量对齐 DEFAULT.yml）：
-  OPENWRT_PATH           本地 OpenWrt 源码目录，默认 /Volumes/OpenWrt/lede
+  OPENWRT_PATH           本地 OpenWrt 源码目录，默认 /Volumes/OpenWrt/openwrt
   WRT_DEVICE             设备名，必填，例如 cmiot-ax18-nowifi、jd-ax1800pro-wifi
-  WRT_FIREWALL           防火墙栈，默认 auto；支持 auto、fw3、fw4
+  WRT_FIREWALL           防火墙栈固定为 fw4
   WRT_FRP_MODE           FRP 模式，默认 none；支持 frpc、frps、frp、none
   WRT_USB_MODE           USB 模式，默认 default；支持 default、usb、nousb
-  WRT_PACKAGE_MANAGER    包管理器，默认 auto；支持 auto、apk、ipk
+  WRT_PACKAGE_MANAGER    包管理器固定为 apk
   WRT_OVERLAYS           可选 overlays，逗号分隔，例如 lucky
                          同一 OVERLAY_GROUP 内按传入顺序以最后一个为准
   WRT_LUCI_BRANCH        可选 LuCI 分支，例如 openwrt-23.05
@@ -36,10 +36,10 @@ show_help() {
   WRT_DIY_FEEDS          自定义 feeds 脚本，默认 diy_feeds.sh
   WRT_DEFAULT_LANIP      默认 LAN IP，默认 192.168.0.1
   WRT_SOURCE_HASH_INFO   可选源码 commit hash
-  SOURCE_TYPE            源码类型，默认 auto；支持 lean、vwrt、libwrt
+  SOURCE_TYPE            源码类型，默认 auto；支持 vwrt、libwrt
 
 本地辅助参数：
-  WRT_THEME_NAME         默认 auto（lean 使用 argon，其它源码使用 aurora）
+  WRT_THEME_NAME         默认 auto（默认使用 aurora）
   IS_RESET_PASSWORD      默认 true
   LOCAL_SKIP_MENUCONFIG  true 时跳过 make menuconfig，默认 false
 EOF
@@ -97,13 +97,13 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 	exit 0
 fi
 
-OPENWRT_PATH=${OPENWRT_PATH:-/Volumes/OpenWrt/lede}
+OPENWRT_PATH=${OPENWRT_PATH:-/Volumes/OpenWrt/openwrt}
 WRT_DEVICE=${WRT_DEVICE:-}
-WRT_FIREWALL=${WRT_FIREWALL:-auto}
+WRT_FIREWALL=fw4
 WRT_OVERLAYS=${WRT_OVERLAYS:-}
 WRT_FRP_MODE=${WRT_FRP_MODE:-none}
 WRT_USB_MODE=${WRT_USB_MODE:-default}
-WRT_PACKAGE_MANAGER=${WRT_PACKAGE_MANAGER:-auto}
+WRT_PACKAGE_MANAGER=apk
 WRT_LUCI_BRANCH=${WRT_LUCI_BRANCH:-}
 WRT_DIY_SETTING=${WRT_DIY_SETTING:-diy_config.sh}
 WRT_DIYPackages=${WRT_DIYPackages:-auto}
@@ -124,10 +124,10 @@ WRT_DEVICE="${WRT_DEVICE,,}"
 }
 
 case "$WRT_FIREWALL" in
-	auto|fw3|fw4)
+	fw4)
 		;;
 	*)
-		echo "WRT_FIREWALL 只支持 auto、fw3 或 fw4" >&2
+		echo "WRT_FIREWALL 固定使用 fw4" >&2
 		exit 1
 		;;
 esac
@@ -165,16 +165,7 @@ export SOURCE_TYPE
 echo "【Lin】源码类型：$SOURCE_TYPE"
 echo "【Lin】配置族：$SOURCE_CONFIG_FAMILY"
 
-if [ "$WRT_FIREWALL" = "auto" ]; then
-	if [ "$SOURCE_CONFIG_FAMILY" = "lean" ]; then
-		WRT_FIREWALL="fw3"
-	else
-		WRT_FIREWALL="fw4"
-	fi
-elif [ "$SOURCE_CONFIG_FAMILY" = "iwrt" ] && [ "$WRT_FIREWALL" = "fw3" ]; then
-	echo "【Lin】警告：${SOURCE_TYPE} 使用 iwrt 配置族，已将 fw3 自动切换为 fw4"
-	WRT_FIREWALL="fw4"
-fi
+WRT_FIREWALL=fw4
 
 auto_overlays=$(infer_default_overlays_for_device "$CONFIG_ROOT" "$WRT_DEVICE" "$WRT_FIREWALL")
 manual_overlays=${WRT_OVERLAYS:-}
@@ -212,14 +203,7 @@ fi
 
 WRT_OVERLAYS=$(merge_overlay_csv_lists "$CONFIG_ROOT" "$auto_overlays" "$combined_overlays")
 
-package_manager="$WRT_PACKAGE_MANAGER"
-if [ "$package_manager" = "auto" ]; then
-	if [ "$SOURCE_TYPE" = "vwrt" ]; then
-		package_manager=apk
-	else
-		package_manager=ipk
-	fi
-fi
+package_manager=apk
 
 if [ "$LOCAL_CLEAN_GENERATED" = 'true' ]; then
 	echo "【Lin】清理本地生成物，避免旧缓存污染 feeds / defconfig"

@@ -2,8 +2,8 @@
 
 # 说明：
 # 1. 该脚本在 OpenWrt 的 package 目录下执行，用于删除、替换和修补第三方插件包。
-# 2. 入口职责保持不变：先应用通用包清单和 lean 专属覆盖，再执行一组编译兼容性修补。
-# 3. 结构上拆成三层：通用包操作函数、lean 专属包清单、后置修补函数。
+# 2. 入口职责保持不变：先应用通用包清单和 iwrt 配置族覆盖，再执行一组编译兼容性修补。
+# 3. 结构上拆成三层：通用包操作函数、iwrt 配置族包清单、后置修补函数。
 # 4. 这个脚本不负责 menuconfig 选包，只负责把 package/ 与部分 feeds 中的包替换成指定来源版本。
 # 5. 包合集先下载并确认目标目录，再替换同名包，避免失败时误删现有包。
 
@@ -30,7 +30,7 @@ package_workdir=$(pwd)
 openwrt_workdir="$(readlink -f ..)"
 luci_feed_branch='unknown'
 
-# 源码类型：根据 lean 特有文件自动判断；非 lean 统一按 iwrt 配置族处理。
+# 源码类型：根据源码仓库类型选择配置族。
 SOURCE_TYPE=$(resolve_source_type "${SOURCE_TYPE:-auto}" "$openwrt_workdir")
 SOURCE_CONFIG_FAMILY=$(source_config_family "${SOURCE_TYPE}")
 echo "【Lin】源码类型：${SOURCE_TYPE}"
@@ -277,12 +277,12 @@ UPDATE_LANSPEED() {
 }
 
 # 备用方案：当单独维护的 luci-app-ninjaconnector2 包仓库不可用时，
-# 可临时改回这个函数，从上游 release ipk 解包生成本地 OpenWrt 包。
+# 可临时改回这个函数，从上游 release 安装包解包生成本地 OpenWrt 包。
 prepare_ninjaconnector2_package() {
     local package_name="luci-app-ninjaconnector2"
     local package_version="1.1.0"
     local package_release="4"
-    local package_file="${package_name}_${package_version}-${package_release}_all.ipk"
+    local package_file="${package_name}_${package_version}-${package_release}_all.apk"
     local package_url="https://github.com/kachetong1314/ninja/releases/download/0.1.13/${package_file}"
     local package_sha256="067872b03de0f5fc214fc1c5ea840502a93faa8b1f44454230661b3d677eb315"
     local tmp_dir
@@ -295,7 +295,7 @@ prepare_ninjaconnector2_package() {
     DELETE_PACKAGE "${package_name}"
     mkdir -p "${package_name}/files"
 
-    # 只把上游 ipk 当作 LuCI 文件载体；最终仍由当前源码树按 ipk/apk 模式重新打包。
+    # 只把上游安装包作为 LuCI 文件载体；最终由当前源码树重新打包。
     if ! curl -L -o "${tmp_dir}/${package_file}" "${package_url}"; then
         rm -rf "${tmp_dir}"
         return 1
@@ -490,7 +490,7 @@ resolve_packages_luci_feed_branch() {
 }
 
 # 通用包清单：所有构建都会执行。
-# 这里应该只放“对当前 lean 源码树始终通用”的替换，不要放只在特定场景才成立的覆盖。
+# 这里应该只放“对所有受支持源码通用”的替换，不要放只在特定场景才成立的覆盖。
 apply_common_package_overrides() {
     # UPDATE_PACKAGE "luci-theme-kucat" "sirpdboy/luci-theme-kucat" "master"
     UPDATE_PACKAGE "luci-theme-noobwrt" "nooblk-98/luci-theme-noobwrt" "master"
@@ -568,26 +568,26 @@ apply_common_package_overrides() {
     # update_package_list "luci-app-quickfile quickfile" "sbwml/luci-app-quickfile" "main"
 
     # luci-app-easymesh未测试 @linjw 20260618
-    # lean源码树中 luci-app-adguardhome 版本较旧且缺中文，这里直接从 kenzok8/openwrt-packages 下载
+    # 部分上游源码中的 luci-app-adguardhome 版本较旧且缺中文，这里直接从 kenzok8/openwrt-packages 下载
     update_package_list "luci-app-adguardhome adguardhome luci-app-easymesh" "kenzok8/openwrt-packages" "master"
 
     update_package_list "luci-app-wolplus" "sundaqiang/openwrt-packages" "master"
     
 }
 
-# lean 风味额外覆盖。
-# 只放 lean 源码树中确实需要替换、且不会和其它风味共享的包。
-apply_lean_package_overrides() {
-    echo "【Lin】启用lean专属包覆盖"
+# 迁移后仍需保留的补充包覆盖。
+# 只放当前配置族需要的补充替换包。
+apply_iwrt_legacy_package_overrides() {
+    echo "【Lin】启用迁移后仍需保留的包覆盖"
 
-    # luci-app-vlmcsd：LEDE专用，IMM用自带的
+    # luci-app-vlmcsd：ImmortalWrt 已包含该应用，避免重复添加。
     update_package_list "luci-app-vlmcsd vlmcsd" "sbwml/openwrt_pkgs" "main"
 
     # 25.12没有的包，从23.05获取
     apply_luci_feed_25_12_package_overrides
     if is_luci_feed_25_12 "${openwrt_workdir}/feeds.conf.default"; then
         # update_package_list "luci-theme-argon luci-app-argon-config" "sbwml/luci-theme-argon" "openwrt-25.12"
-        # 使用lean源码自带的argon
+        # 使用当前源码自带的 argon
         update_package_list "luci-app-argon-config" "sbwml/luci-theme-argon" "openwrt-25.12"
     else
         UPDATE_PACKAGE "luci-theme-argon" "jerrykuku/luci-theme-argon" "v2.3.2"
@@ -595,7 +595,7 @@ apply_lean_package_overrides() {
     fi
 
     if ! is_luci_feed_25_12 "${openwrt_workdir}/feeds.conf.default"; then
-        update_package_list "luci-app-3cat" "coolsnowwolf/luci" "openwrt-25.12" # 非 25.12 feed 时补入 lean 上游 3cat
+        update_package_list "luci-app-3cat" "coolsnowwolf/luci" "openwrt-25.12" # 非 25.12 feed 时补入 上游 3cat
     fi
     
     # update_package_list "luci-app-wolplus" "sundaqiang/openwrt-packages" "master"
@@ -661,7 +661,7 @@ apply_luci_feed_25_12_package_overrides() {
     echo "【Lin】检测到 LuCI feed 为 openwrt-25.12，补齐 25.12 兼容包源"
 
     echo "【Lin】25.12未找到luci-app-accesscontrol和luci-app-filetransfer，从coolsnowwolf/luci的openwrt-23.05分支获取"
-    update_package_list "luci-app-accesscontrol luci-app-filetransfer" "coolsnowwolf/luci" "openwrt-23.05" # 25.12 feed 时补入 lean 上游 v23.05 luci-app-accesscontrol和luci-app-filetransfer
+    update_package_list "luci-app-accesscontrol luci-app-filetransfer" "coolsnowwolf/luci" "openwrt-23.05" # 25.12 feed 时补入 上游 v23.05 luci-app-accesscontrol和luci-app-filetransfer
 
 }
 
@@ -903,20 +903,14 @@ apply_post_update_fixes() {
 
 # 主入口保持极简，只负责串联三个阶段：
 # 1. 应用通用包覆盖
-# 2. 应用源码配置族专属覆盖（lean 或 iwrt）
+# 2. 应用源码配置族专属覆盖（统一 iwrt 配置族）
 # 3. 执行后置修补链
 main() {
     resolve_packages_luci_feed_branch
     apply_common_package_overrides
 
-    case "${SOURCE_CONFIG_FAMILY}" in
-        iwrt)
-            apply_iwrt_package_overrides
-            ;;
-        lean|*)
-            apply_lean_package_overrides
-            ;;
-    esac
+    apply_iwrt_package_overrides
+    apply_iwrt_legacy_package_overrides
 
     apply_post_update_fixes
 }

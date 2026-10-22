@@ -29,14 +29,14 @@ permissions: write-all
 
 #CI任务
 jobs:
-  # cmiot_ax18_nowifi_fw3:
-  #   name: cmiot-ax18-nowifi-fw3-base
+  # cmiot_ax18_nowifi_fw4:
+  #   name: cmiot-ax18-nowifi-fw4-base
   #   uses: ./.github/workflows/CORE-ALL.yml
   #   with:
   #     WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
   #     WRT_DEVICE: cmiot-ax18-nowifi
-  #     SOURCE_TYPE: 'lean'
-  #     WRT_FIREWALL: auto
+  #     SOURCE_TYPE: 'vwrt'
+  #     WRT_FIREWALL: fw4
   #     WRT_OVERLAYS: ''
   #     WRT_DIY_SETTING: diy_config.sh
   #     WRT_DIYPackages: Packages.sh
@@ -46,14 +46,14 @@ jobs:
   #     WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
   #   secrets: inherit
 
-  cmiot_ax18_nowifi_fw3_frps:
-    name: cmiot-ax18-nowifi-fw3-frps
+  cmiot_ax18_nowifi_fw4_frps:
+    name: cmiot-ax18-nowifi-fw4-frps
     uses: ./.github/workflows/CORE-ALL.yml
     with:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_DEVICE: cmiot-ax18-nowifi
-      SOURCE_TYPE: 'lean'
-      WRT_FIREWALL: auto
+      SOURCE_TYPE: 'vwrt'
+      WRT_FIREWALL: fw4
       WRT_OVERLAYS: frps
       WRT_DIY_SETTING: diy_config.sh
       WRT_DIYPackages: Packages.sh
@@ -63,14 +63,14 @@ jobs:
       WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
     secrets: inherit
 
-  gl_mt6000_wifi_fw3:
-    name: gl-mt6000-wifi-fw3-base
+  gl_mt6000_wifi_fw4:
+    name: gl-mt6000-wifi-fw4-base
     uses: ./.github/workflows/CORE-ALL.yml
     with:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_DEVICE: gl-mt6000-wifi
-      SOURCE_TYPE: 'lean'
-      WRT_FIREWALL: auto
+      SOURCE_TYPE: 'vwrt'
+      WRT_FIREWALL: fw4
       WRT_OVERLAYS: ''
       WRT_DIY_SETTING: diy_config.sh
       WRT_DIYPackages: Packages.sh
@@ -80,14 +80,14 @@ jobs:
       WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
     secrets: inherit
 
-  jd_ax6600_wifi_fw3:
-    name: jd-ax6600-wifi-fw3-base
+  jd_ax6600_wifi_fw4:
+    name: jd-ax6600-wifi-fw4-base
     uses: ./.github/workflows/CORE-ALL.yml
     with:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_DEVICE: jd-ax6600-wifi
-      SOURCE_TYPE: 'lean'
-      WRT_FIREWALL: auto
+      SOURCE_TYPE: 'vwrt'
+      WRT_FIREWALL: fw4
       WRT_OVERLAYS: ''
       WRT_DIY_SETTING: diy_config.sh
       WRT_DIYPackages: Packages.sh

@@ -23,15 +23,15 @@ output_config=''
 cleanup_files=''
 context_output=''
 
-# 导出配置时优先复用当前源码目录判断 SOURCE_TYPE；缺少源码目录时退回 lean，保证离线导出也能工作。
+# 导出配置时复用源码目录识别；离线时默认使用 vwrt 配置族。
 resolve_export_source_type() {
-	local requested_type="${SOURCE_TYPE:-lean}"
+	local requested_type="${SOURCE_TYPE:-vwrt}"
 
 	if [ "$requested_type" = "auto" ]; then
 		if [ -n "${OPENWRT_PATH:-}" ] && [ -d "${OPENWRT_PATH}" ]; then
 			resolve_source_type "$requested_type" "$OPENWRT_PATH"
 		else
-			printf '%s\n' 'lean'
+			printf '%s\n' 'vwrt'
 		fi
 	else
 		resolve_source_type "$requested_type" .
@@ -52,23 +52,10 @@ resolve_device_config() {
 	fw_lower=$(echo "$fw_name" | tr '[:upper:]' '[:lower:]')
 	device_name_lower=$(echo "$device_name" | tr '[:upper:]' '[:lower:]')
 
-	# 1. 源码类型专用配置
-	#    iwrt/vwrt/libwrt → DEVICE-FW4-iwrt.txt（iwrt 配置族默认 fw4）
-	#    lean → DEVICE-FW3.txt（lean 默认 fw3）
-	if [ "$source_family" = "iwrt" ] || [ "$fw_lower" = "fw4" ]; then
-		# iwrt 配置族优先查找 fw4-iwrt 配置，如果不存在则查找 fw3 配置
-		if [ -f "$config_root/${device_name_lower}-fw4-iwrt.txt" ]; then
-			printf '%s\n' "${device_name_lower}-fw4-iwrt.txt"
-			return 0
-		elif [ -f "$config_root/${device_name_lower}-fw3.txt" ]; then
-			printf '%s\n' "${device_name_lower}-fw3.txt"
-			return 0
-		fi
-	else
-		if [ -f "$config_root/${device_name_lower}-fw3.txt" ]; then
-			printf '%s\n' "${device_name_lower}-fw3.txt"
-			return 0
-		fi
+	# 所有设备统一使用 fw4-iwrt 配置。
+	if [ -f "$config_root/${device_name_lower}-fw4-iwrt.txt" ]; then
+		printf '%s\n' "${device_name_lower}-fw4-iwrt.txt"
+		return 0
 	fi
 
 	# 2. 兼容旧文件名（过渡期，迁移完成后可移除）
@@ -82,19 +69,9 @@ resolve_device_config() {
 		*-nowifi)
 			local short_name=${device_name_lower%-nowifi}
 			local wifi_name="${short_name}-wifi"
-			if [ "$source_family" = "iwrt" ] || [ "$fw_lower" = "fw4" ]; then
-				if [ -f "$config_root/${wifi_name}-fw4-iwrt.txt" ]; then
-					printf '%s\n' "${wifi_name}-fw4-iwrt.txt"
-					return 0
-				elif [ -f "$config_root/${wifi_name}-fw3.txt" ]; then
-					printf '%s\n' "${wifi_name}-fw3.txt"
-					return 0
-				fi
-			else
-				if [ -f "$config_root/${wifi_name}-fw3.txt" ]; then
-					printf '%s\n' "${wifi_name}-fw3.txt"
-					return 0
-				fi
+			if [ -f "$config_root/${wifi_name}-fw4-iwrt.txt" ]; then
+				printf '%s\n' "${wifi_name}-fw4-iwrt.txt"
+				return 0
 			fi
 			if [ -f "$config_root/${wifi_name}.txt" ]; then
 				printf '%s\n' "${wifi_name}.txt"
@@ -129,8 +106,8 @@ resolve_general_configs() {
 	fi
 	local device_name_lower
 	device_name_lower=$(echo "$device_name" | tr '[:upper:]' '[:lower:]')
-	local general_file='general.txt'
-	local source_type_file="general-${source_type}.txt"
+	local general_file='general-iwrt.txt'
+	local source_type_file="general-${source_family}.txt"
 	local source_family_file="general-${source_family}.txt"
 
 	# 1. 设备专用配置（最高优先）
@@ -185,7 +162,7 @@ cleanup() {
 device_config_embeds_fw_stack() {
 	local config_path=$1
 
-	grep -Eq '^# >>> FW[34]-BEGIN$' "$config_path"
+	grep -Eq '^# >>> FW4-BEGIN$' "$config_path"
 }
 
 device_config_embeds_service_layer() {
@@ -199,21 +176,11 @@ preprocess_device_config() {
 	local fw_name=$2
 	local output_config_path=$3
 	local current_block=''
-	local fw_upper line
-
-	fw_upper=$(printf '%s' "$fw_name" | tr '[:lower:]' '[:upper:]')
+	local line
 	: > "$output_config_path"
 
 	while IFS= read -r line || [ -n "$line" ]; do
 		case "$line" in
-			'# >>> FW3-BEGIN')
-				current_block='FW3'
-				continue
-				;;
-			'# <<< FW3-END')
-				current_block=''
-				continue
-				;;
 			'# >>> SERVICE-BEGIN')
 				current_block='SERVICE'
 				continue
@@ -239,22 +206,15 @@ preprocess_device_config() {
 			SERVICE)
 				printf '%s\n' "$line" >> "$output_config_path"
 				;;
-			FW3)
-				if [ "$fw_upper" = 'FW3' ]; then
-					printf '%s\n' "$line" >> "$output_config_path"
-				fi
-				;;
 			FW4)
-				if [ "$fw_upper" = 'FW4' ]; then
-					case "$line" in
+				case "$line" in
 						\#[[:space:]]*CONFIG_*=*)
 							printf '%s\n' "$(printf '%s' "$line" | sed 's/^#[[:space:]]*//')" >> "$output_config_path"
 							;;
-						*)
-							printf '%s\n' "$line" >> "$output_config_path"
-							;;
-					esac
-				fi
+					*)
+						printf '%s\n' "$line" >> "$output_config_path"
+						;;
+				esac
 				;;
 		esac
 	done < "$input_config"
@@ -380,18 +340,18 @@ general_config_list_to_paths() {
 show_help() {
 	cat <<'EOF'
 用法：
-  bash Scripts/export_config.sh --device 设备名 --fw fw3|fw4 --output 输出文件 [--overlay 列表] [--config-dir 目录]
+  bash Scripts/export_config.sh --device 设备名 --fw fw4 --output 输出文件 [--overlay 列表] [--config-dir 目录]
 
 示例：
   bash Scripts/export_config.sh \
     --device cmiot-ax18-nowifi \
-    --fw fw3 \
+    --fw fw4 \
     --overlay frps,nousb \
-    --output /tmp/cmiot-ax18-nowifi-fw3-frps-nousb.txt
+    --output /tmp/cmiot-ax18-nowifi-fw4-frps-nousb.txt
 
 参数：
   --device      设备名，例如 cmiot-ax18-nowifi、jd-ax1800pro-wifi
-  --fw          防火墙栈，fw3 或 fw4
+  --fw          防火墙栈固定为 fw4
   --overlay     可选 overlay 列表，逗号分隔，例如 frps,nousb
                 同一 OVERLAY_GROUP 内按传入顺序以最后一个为准
 	  --output      输出文件路径
@@ -457,10 +417,10 @@ trap cleanup EXIT
 }
 
 case "${fw}" in
-	fw3|fw4|FW3|FW4)
+	fw4|FW4)
 		;;
 	*)
-		echo "fw 参数只支持 fw3 或 fw4" >&2
+		echo "fw 参数固定为 fw4" >&2
 		exit 1
 		;;
 esac
@@ -472,7 +432,7 @@ final_overlay_file_paths=$(overlay_csv_to_file_paths "$config_dir" "$overlay_lis
 
 device_config=$(resolve_device_config "$config_dir" "$device" "$fw" || true)
 if [ -z "$device_config" ]; then
-	echo "缺少设备配置：$config_dir/${device}.txt、$config_dir/${device}-fw3.txt 或 $config_dir/${device}-fw4-iwrt.txt" >&2
+	echo "缺少设备配置：$config_dir/${device}.txt、$config_dir/${device}-fw4-iwrt.txt" >&2
 	exit 1
 fi
 

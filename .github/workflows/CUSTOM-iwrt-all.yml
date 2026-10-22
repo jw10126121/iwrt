@@ -45,8 +45,8 @@ jobs:
   #     WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
   #     WRT_DEVICE: cmiot-ax18-nowifi
   #     SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
-  #     WRT_PACKAGE_MANAGER: ${{ inputs.SOURCE_TYPE == 'libwrt' && 'apk' || 'auto' }}
-  #     WRT_FIREWALL: auto
+  #     WRT_PACKAGE_MANAGER: apk
+  #     WRT_FIREWALL: fw4
   #     WRT_OVERLAYS: ''
   #     WRT_DIY_SETTING: diy_config.sh
   #     WRT_DIYPackages: Packages.sh
@@ -63,8 +63,8 @@ jobs:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_DEVICE: cmiot-ax18-nowifi
       SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
-      WRT_PACKAGE_MANAGER: ${{ inputs.SOURCE_TYPE == 'libwrt' && 'apk' || 'auto' }}
-      WRT_FIREWALL: auto
+      WRT_PACKAGE_MANAGER: apk
+      WRT_FIREWALL: fw4
       WRT_OVERLAYS: frps
       WRT_DIY_SETTING: diy_config.sh
       WRT_DIYPackages: Packages.sh
@@ -81,8 +81,8 @@ jobs:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_DEVICE: gl-mt6000-nowifi
       SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
-      WRT_PACKAGE_MANAGER: ${{ inputs.SOURCE_TYPE == 'libwrt' && 'apk' || 'auto' }}
-      WRT_FIREWALL: auto
+      WRT_PACKAGE_MANAGER: apk
+      WRT_FIREWALL: fw4
       WRT_OVERLAYS: ''
       WRT_DIY_SETTING: diy_config.sh
       WRT_DIYPackages: Packages.sh
@@ -99,8 +99,8 @@ jobs:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_DEVICE: gl-mt6000-wifi
       SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
-      WRT_PACKAGE_MANAGER: ${{ inputs.SOURCE_TYPE == 'libwrt' && 'apk' || 'auto' }}
-      WRT_FIREWALL: auto
+      WRT_PACKAGE_MANAGER: apk
+      WRT_FIREWALL: fw4
       WRT_OVERLAYS: ''
       WRT_DIY_SETTING: diy_config.sh
       WRT_DIYPackages: Packages.sh
@@ -117,8 +117,8 @@ jobs:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_DEVICE: jd-ax6600-wifi
       SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
-      WRT_PACKAGE_MANAGER: ${{ inputs.SOURCE_TYPE == 'libwrt' && 'apk' || 'auto' }}
-      WRT_FIREWALL: auto
+      WRT_PACKAGE_MANAGER: apk
+      WRT_FIREWALL: fw4
       WRT_OVERLAYS: ''
       WRT_DIY_SETTING: diy_config.sh
       WRT_DIYPackages: Packages.sh
