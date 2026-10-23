@@ -51,17 +51,12 @@ on:
       WRT_DIY_SETTING:
         required: true
         type: string
-        default: 'diy_config.sh'
       WRT_DIY_FEEDS:
         required: true
         type: string
-        default: diy_feeds.sh
       WRT_DIYPackages:
         required: true
         type: string
-      WRT_RELEASE_FIRMWARE:
-        required: true
-        type: boolean
       WRT_DEFAULT_LANIP:
         required: true
         type: string
@@ -89,14 +84,6 @@ on:
         required: false
       WEBHOOK_FEISHU:
         required: false
-      CLOUDFLARE_ACCOUNT_ID:
-        required: false
-      CLOUDFLARE_API_TOKEN:
-        required: false
-      # UPLOAD_FIRMWARE_DIR:
-      #   required: false
-      #   type: boolean
-      #   default: true
         
 #环境变量配置
 env:
@@ -104,8 +91,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   WEBHOOK_DINGDING: ${{ secrets.WEBHOOK_DINGDING }}
   WEBHOOK_FEISHU: ${{ secrets.WEBHOOK_FEISHU }}
-  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   WRT_SOURCE_HASH_INFO: ${{inputs.WRT_SOURCE_HASH_INFO}}
   WRT_DEVICE: ${{inputs.WRT_DEVICE}}                          # 设备名
   SOURCE_TYPE: ${{inputs.SOURCE_TYPE}}                        # 源码类型 VIKINGYFY/libwrt；非 IPQ 自动解析为 immortalwrt
@@ -120,7 +105,6 @@ env:
   WRT_DIY_SETTING: ${{ inputs.WRT_DIY_SETTING }}              # 自定义配置
   WRT_DIY_FEEDS: ${{ inputs.WRT_DIY_FEEDS }}                  # 主要用于更新Feeds
   WRT_DIYPackages: ${{inputs.WRT_DIYPackages}}                # 自定义包配置
-  WRT_RELEASE_FIRMWARE: ${{inputs.WRT_RELEASE_FIRMWARE}}      # 发布固件
   WRT_DEFAULT_LANIP: ${{inputs.WRT_DEFAULT_LANIP}}            # 默认lanIP
   WRT_WIFI_SSID: ${{inputs.WRT_WIFI_SSID}}                    # 默认 WiFi 名称
   WRT_WIFI_PASSWORD: ${{inputs.WRT_WIFI_PASSWORD}}            # 默认 WiFi 密码
@@ -128,8 +112,6 @@ env:
   WRT_DIR_CONFIGS: Config                                     # 自定义配置文件夹
   WRT_DIR_SCRIPTS: Scripts                                    # 脚本文件夹
   WRT_THEME_NAME: 'auto'
-  UPLOAD_FIRMWARE_DIR: true
-  SPLIT_ARTIFACTS: true                                       # 是否将固件和Packages包分开上传到Artifact
   IS_RESET_PASSWORD: true                                     # 是否把密码重置为空
   IS_RESIZE_SPACE: true                                      # 是否扩容空间，一般编译内容不多，可以不扩容，减少资源浪费
   FREE_UP_DISK: true                                          # 是否清理磁盘
@@ -723,83 +705,22 @@ jobs:
       run: |
         bash "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/apk_feed.sh" collect
 
-    - name: Resolve Cloudflare Pages Project (解析 Pages 项目)
-      id: pages_project
-      if: steps.finalize_compile.outputs.status == 'success' && env.WRT_FEED_HOST != ''
-      env:
-        CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      run: |
-        host="${WRT_FEED_HOST#https://}"
-        host="${host#http://}"
-        host="${host%%/*}"
-        project="${host%%.*}"
-        echo "project=$project" >> "$GITHUB_OUTPUT"
-        if [ -z "$CF_ACCOUNT_ID" ] || [ -z "$CF_API_TOKEN" ]; then
-          echo 'ready=false' >> "$GITHUB_OUTPUT"
-          echo '【软件源】Cloudflare 未发布：请配置 CLOUDFLARE_ACCOUNT_ID 和 CLOUDFLARE_API_TOKEN 仓库密钥'
-        else
-          echo 'ready=true' >> "$GITHUB_OUTPUT"
-        fi
-
-    - name: Publish APK Feed To Cloudflare Pages (发布 APK 软件源)
-      if: steps.pages_project.outputs.ready == 'true'
-      uses: cloudflare/wrangler-action@v3
-      with:
-        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        command: >-
-          pages deploy "${{ github.workspace }}/feed-out/${{ env.WRT_HASH }}"
-          --project-name="${{ steps.pages_project.outputs.project }}" --branch="${{ env.WRT_HASH }}"
-
-    - name: Organize Files (整理编译后的文件)
-      id: organize
+    # 仅封装跨任务传递的原始产物；最终整理、Artifact 和 Release 都由入口统一处理。
+    - name: Export Raw Build Outputs (交付原始构建产物)
       if: steps.finalize_compile.outputs.status == 'success'
-      working-directory: ${{ env.OPENWRT_PATH }}
       run: |
-        bash "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/ci_organize_outputs.sh"
+        python3 "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/ci_build_outputs.py" export \
+          --output "$GITHUB_WORKSPACE/build-output"
 
-    - name: Supplement Versions From Manifest(从 manifest 补充插件版本号)
-      if: steps.organize.outputs.status == 'success'
-      working-directory: ${{ env.OPENWRT_PATH }}
-      run: |
-        bash "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/ci_supplement_versions_from_manifest.sh"
-
-    - name: Check Disk (查询磁盘信息)
-      run: |
-        df -hT $GITHUB_WORKSPACE
-
-    - name: Upload Firmware To Artifact (将固件上传到 Artifact)
-      id: upload_artifact
-      timeout-minutes: 30
-      continue-on-error: true
-      if: steps.finalize_compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE_DIR == 'true'
+    - name: Upload Raw Build Outputs (传递原始构建产物)
+      if: steps.finalize_compile.outputs.status == 'success'
       uses: actions/upload-artifact@v6.0.0
       with:
-        name: ${{ env.OUTPUT_NAME_PREFIX }}
-        path: |
-          ${{ env.OPENWRT_PATH }}/upload/*
-          !${{ env.OPENWRT_PATH }}/upload/*_Packages.zip
-          !${{ env.OPENWRT_PATH }}/upload/*_Packages/**
-
-    - name: Upload APK Feed To Artifact (上传 APK 软件源)
-      if: steps.finalize_compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE_DIR == 'true'
-      uses: actions/upload-artifact@v6.0.0
-      with:
-        name: ${{ env.OUTPUT_NAME_PREFIX }}-apk-feed
-        path: ${{ github.workspace }}/feed-out/**
-        if-no-files-found: ignore
-
-    - name: Upload Packages To Artifact (将 Packages 包单独上传到 Artifact)
-      id: upload_packages_artifact
-      timeout-minutes: 30
-      continue-on-error: true
-      if: steps.finalize_compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE_DIR == 'true' && env.SPLIT_ARTIFACTS == 'true'
-      uses: actions/upload-artifact@v6.0.0
-      with:
-        name: ${{ env.OUTPUT_NAME_PREFIX }}-packages
-        path: ${{ env.OPENWRT_PATH }}/upload/${{ env.OUTPUT_NAME_PREFIX }}_Packages
-        if-no-files-found: ignore
+        name: ${{ env.OUTPUT_NAME_PREFIX }}-build-output
+        path: ${{ github.workspace }}/build-output/
+        if-no-files-found: error
+        retention-days: 1
+        compression-level: 0
 
     - name: Create Notification Content (创建推送结果内容)
       id: notification_content
@@ -851,37 +772,6 @@ jobs:
       env:
         FEISHU_MESSAGE: |
           ${{ env.notify_content }}
-
-    - name: Prepare Release Body (读取发布内容)
-      run: |
-        echo "【Lin】发布内容: ${{ env.release_desc_file }}"
-        the_release_content=$(cat ${{ env.release_desc_file }})
-        echo "${the_release_content}"
-
-    - name: Upload Firmware To Release (发布固件)
-      id: release
-      if: steps.finalize_compile.outputs.status == 'success' && env.WRT_RELEASE_FIRMWARE == 'true'
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        release_name="${{ env.OUTPUT_NAME_PREFIX }}"
-        release_tag="${{ env.OUTPUT_NAME_PREFIX }}"
-        shopt -s nullglob
-        release_files=( "${{ env.OPENWRT_PATH }}"/upload/*.* )
-
-        if [ ${#release_files[@]} -eq 0 ]; then
-          echo "【Lin】错误：未找到可上传的固件文件"
-          exit 1
-        fi
-
-        if gh release view "${release_tag}" >/dev/null 2>&1; then
-          echo "【Lin】更新已有 Release：${release_tag}"
-          gh release edit "${release_tag}" --title "${release_name}" --notes-file "${{ env.release_desc_file }}"
-          gh release upload "${release_tag}" "${release_files[@]}" --clobber
-        else
-          echo "【Lin】创建新的 Release：${release_tag}"
-          gh release create "${release_tag}" "${release_files[@]}" --title "${release_name}" --notes-file "${{ env.release_desc_file }}"
-        fi
 
     - name: Cleanup Workspace Before Cache Save
       if: always()

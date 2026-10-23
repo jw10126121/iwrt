@@ -1,0 +1,107 @@
+# 由 CUSTOM/DEFAULT 在全部设备编译成功后调用，统一整理并发布本工作流的产物。
+name: PUBLISH-OUTPUTS
+
+on:
+  workflow_call:
+    inputs:
+      WRT_FEED_HOST:
+        required: true
+        type: string
+      WRT_RELEASE_FIRMWARE:
+        required: true
+        type: boolean
+      WRT_EXPECTED_BUILDS:
+        required: true
+        type: number
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+      CLOUDFLARE_API_TOKEN:
+        required: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    name: 按型号整理固件、按平台汇总插件并统一发布
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 检出项目
+        uses: actions/checkout@v6
+
+      # 分开下载，不能直接 merge-multiple，否则旧索引与同名包会被覆盖。
+      - name: 下载本工作流的全部原始产物
+        uses: actions/download-artifact@v7
+        with:
+          pattern: '*-build-output'
+          path: build-artifacts
+          merge-multiple: false
+
+      - name: 校验产物并按设备型号整理固件
+        env:
+          EXPECTED_BUILDS: ${{ inputs.WRT_EXPECTED_BUILDS }}
+        run: |
+          python3 Scripts/ci_build_outputs.py organize \
+            --input build-artifacts --output firmware --work firmware-work \
+            --feeds-output feed-artifacts --expected-count "$EXPECTED_BUILDS"
+
+      - name: 按平台汇总插件并重建软件源索引
+        id: merge
+        env:
+          EXPECTED_BUILDS: ${{ inputs.WRT_EXPECTED_BUILDS }}
+          FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
+        run: |
+          python3 Scripts/merge_apk_feeds.py \
+            --input feed-artifacts --output public \
+            --packages-output packages --archives-output package-archives \
+            --expected-count "$EXPECTED_BUILDS" --host "$FEED_HOST"
+
+      - name: 保存合并后的 APK 包归档
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: apk-packages
+          path: package-archives/
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: 保存按设备型号整理的固件
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: firmware
+          path: firmware/
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: 检查 Cloudflare 发布凭据
+        id: credentials
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$CF_ACCOUNT_ID" ] && [ -n "$CF_API_TOKEN" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo '【软件源】完整包已保存在 apk-packages 中按平台区分的 ZIP 内；发布需要配置 CLOUDFLARE_ACCOUNT_ID 和 CLOUDFLARE_API_TOKEN'
+          fi
+
+      - name: 一次部署完整软件源到 Cloudflare Pages
+        if: inputs.WRT_FEED_HOST != '' && steps.credentials.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: >-
+            pages deploy public
+            --project-name="${{ steps.merge.outputs.project }}"
+            --branch="${{ steps.merge.outputs.tag }}"
+
+      - name: 按设备型号发布固件 Release
+        if: inputs.WRT_RELEASE_FIRMWARE
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 Scripts/ci_build_outputs.py release \
+            --output firmware --work firmware-work

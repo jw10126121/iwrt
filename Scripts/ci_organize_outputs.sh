@@ -1,12 +1,12 @@
 #!/bin/bash
 # 说明：
-# 1. 在 CI 末尾整理编译产物、README、配置文件和安装包归档。
-# 2. 会调用 readme.sh 与 Organize_Packages.sh 生成最终上传目录。
+# 1. 在入口工作流的发布任务中整理固件、README 和配置文件。
+# 2. 安装包由同一发布任务按平台汇总，不在这里按机型重复归档。
 
 set -euo pipefail
 
 # 这些路径都由 GitHub Actions 在运行时注入。
-# openwrt_path 指向真正的 OpenWrt 源码工作目录；
+# openwrt_path 指向从 CORE 原始产物恢复的构建目录；
 # scripts_dir 指向当前仓库里的 Scripts 目录，方便复用仓库脚本。
 openwrt_path="${OPENWRT_PATH:?OPENWRT_PATH is required}"
 scripts_dir="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}/${WRT_DIR_SCRIPTS:?WRT_DIR_SCRIPTS is required}"
@@ -14,8 +14,7 @@ scripts_dir="${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}/${WRT_DIR_SCRIPTS
 cd "${openwrt_path}"
 # upload/ 是最终给 artifact / release 使用的统一出口目录：
 # - configs/ 保留配置类文件
-# - ${prefix}_Packages/ 保留分类后的安装包，供单独的 Packages Artifact 上传
-mkdir -p ./upload ./upload/configs
+mkdir -p ./upload ./config_mine
 
 # 先删除旧的 readme.txt，避免本次生成结果与上一次残留混在一起。
 rm -f ./config_mine/readme.txt
@@ -52,24 +51,11 @@ if [ -f ./seed.config ]; then
     cp -f ./seed.config "./upload/config_seed_${output_name_prefix}.txt"
 fi
 
-# 先把分散在 bin/ 下的所有 apk 收拢到最终 Packages 目录，再按功能重组。
-# Artifact 直接上传该目录，Release 则从该目录生成单层 ZIP，用户无需二次解压。
-packages_dir="./upload/${output_name_prefix}_Packages"
-packages_zip="./upload/${output_name_prefix}_Packages.zip"
-mkdir -p "${packages_dir}"
-find ./bin/packages/ -type f -name "*.apk" -exec mv -f {} "${packages_dir}" \;
-find ./bin/targets/ -type f -name "*.apk" -exec mv -f {} "${packages_dir}" \;
+# Artifact 和 Release 都只整理固件；插件包统一按平台保存。
+find ./bin/targets/ -type f -name '*.apk' -delete
 find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
 find ./bin/targets/ -iregex ".*\(initramfs-uImage\).*" -exec rm -rf {} +
 find ./bin/targets/ -iregex ".*\(-imagebuilder-\).*" -exec rm -rf {} +
-
-# 按手工维护的包分组规则整理安装包目录，并生成 Release 使用的单层 ZIP。
-bash "${scripts_dir}/Organize_Packages.sh" "${packages_dir}" "./.config"
-rm -f "${packages_zip}"
-(
-    cd ./upload
-    zip -qr "$(basename "${packages_zip}")" "$(basename "${packages_dir}")"
-)
 
 # 固件镜像文件按“子平台_设备名_源码风味_FW_FRP_版本_开始时间”重命名，方便发布页辨认。
 # type 来自 DEVICE_NAME_LIST，例如 cmiot_ax18 / glinet_gl-mt6000。
@@ -83,7 +69,7 @@ for type in ${DEVICE_NAME_LIST:-}; do
         # 从原始文件名中提取“设备名起始后的剩余主体”，
         # 例如 cmiot_ax18-squashfs-sysupgrade，用于保留镜像种类信息。
         name="$(basename "${file}" | cut -d '.' -f 1 | grep -io "\(${type}\).*")"
-        image_kind="${name#${type}-}"
+        image_kind="${name#"${type}"-}"
         new_file="${output_name_prefix}_${image_kind}.${ext}"
         mv -f "${file}" "./upload/${new_file}"
     done < <(find ./bin/targets/ -type f -iname "*${type}*.*")

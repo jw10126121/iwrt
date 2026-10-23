@@ -1,0 +1,200 @@
+# ------------------------------------------------------------------------
+#  通用插件配置（CMIOT-AX18 / GL-MT6000 / JD-AX6600 合并）
+# ------------------------------------------------------------------------
+#  使用说明：
+#  1. 上半部分为三台设备完全一致的共用配置，可直接用于所有设备。
+#  2. 下半部分为各设备差异项，按设备分块并用注释区分；默认全部注释，
+#     编译某台设备时启用对应区块，不要同时启用多个设备的区块。
+#  3. luci-i18n-*-zh-cn 中文语言包已统一移除，需要时再按插件单独添加。
+#  4. 构建统一使用 APK 包管理器与 fw4 防火墙。
+#  5. 目标平台、机型 profile 属于设备差异，统一放在文件末尾。
+
+
+# ------------------------------------------------------------------------
+#  防火墙
+# ------------------------------------------------------------------------
+CONFIG_PACKAGE_firewall4=y                  # 防火墙 FW4（nftables）
+CONFIG_PACKAGE_firewall=n                   # 关闭旧 firewall 包
+
+
+# ------------------------------------------------------------------------
+#  FW4 基础依赖：iptables/nftables 配置
+# ------------------------------------------------------------------------
+#  维护提示：FW4 使用 nftables，但部分插件可能依赖 iptables，建议保留默认配置。
+#  如需显式关闭 iptables，请取消下方注释（注意：可能影响依赖 iptables 的插件）。
+#
+# 关闭 iptables 相关（FW4 不需要，但可能影响插件）
+#CONFIG_PACKAGE_iptables=n                  # 关闭 iptables 用户态
+#CONFIG_PACKAGE_ip6tables=n                 # 关闭 IPv6 iptables
+#CONFIG_PACKAGE_ip6tables-extra=n           # 关闭 IPv6 iptables 扩展
+#CONFIG_PACKAGE_ip6tables-mod-nat=n         # 关闭 IPv6 NAT 模块
+#CONFIG_PACKAGE_iptables-mod-fullconenat=n  # 关闭 iptables FullCone
+#CONFIG_PACKAGE_kmod-ipt-fullconenat=n      # 关闭 iptables FullCone 内核模块
+#
+# 启用 nftables 相关（FW4 核心依赖）
+#CONFIG_PACKAGE_kmod-nf-conntrack=y         # 连接跟踪核心
+#CONFIG_PACKAGE_kmod-nf-conntrack-netlink=y # 连接跟踪 Netlink 接口
+#CONFIG_PACKAGE_kmod-nf-conntrack6=y        # IPv6 连接跟踪
+#CONFIG_PACKAGE_nftables=y                  # nftables 用户态
+#CONFIG_PACKAGE_kmod-nft-core=y             # nftables 核心
+#CONFIG_PACKAGE_kmod-nft-nat=y              # nft NAT 核心
+#CONFIG_PACKAGE_kmod-nft-offload=y          # nft flow offload
+#CONFIG_PACKAGE_kmod-nft-fullcone=y         # nft FullCone NAT
+#
+# FW4 下插件配置
+#CONFIG_PACKAGE_luci-app-turboacc=n         # FW4 下关闭 Turbo ACC
+
+
+# ------------------------------------------------------------------------
+#  菜单整理：网络
+# ------------------------------------------------------------------------
+#  维护提示：流控、端口转发、网络协议相关集中在这里。
+CONFIG_PACKAGE_luci-app-sqm=y               # SQM QoS 流量整形
+CONFIG_PACKAGE_luci-app-upnp=y              # UPnP 端口映射
+CONFIG_PACKAGE_luci-app-3cat=m              # 端口转发 / 中继
+CONFIG_PACKAGE_luci-app-socat=y             # Socat 网络工具
+CONFIG_PACKAGE_luci-app-onliner=m           # 在线设备扫描
+CONFIG_PACKAGE_luci-app-clientstatus=y      # 客户端管理
+CONFIG_PACKAGE_luci-app-wol=y               # Wake on LAN
+CONFIG_PACKAGE_luci-app-wolplus=m           # 增强版 WOL 网络唤醒
+
+
+# ------------------------------------------------------------------------
+#  菜单整理：服务
+# ------------------------------------------------------------------------
+#  维护提示：系统管理、推送、文件共享等常驻服务放这里。
+CONFIG_PACKAGE_luci-app-autoreboot=m        # 定时重启
+CONFIG_PACKAGE_luci-app-partexp=m           # 分区扩容
+CONFIG_PACKAGE_luci-app-watchcat=y          # 看门狗（断网自动重启）
+CONFIG_PACKAGE_luci-app-pushbot=y           # PushBot 推送
+CONFIG_PACKAGE_luci-app-wechatpush=m        # 微信推送
+CONFIG_PACKAGE_luci-app-ddns=y              # 动态域名
+CONFIG_PACKAGE_ddns-scripts-aliyun=y        # 阿里云ddns支持
+CONFIG_PACKAGE_luci-app-oaf=m               # OpenAppFilter 应用过滤
+CONFIG_PACKAGE_luci-app-vlmcsd=y            # VLMCSD KMS 服务器
+#
+# 暂不启用：luci-app-quickstart（快捷配置）、luci-app-gecoosac（GeCoosAC 智能家居）
+
+
+# ------------------------------------------------------------------------
+#  菜单整理：NAS
+# ------------------------------------------------------------------------
+#  维护提示：共享、磁盘管理、文件索引都归到这组。
+CONFIG_PACKAGE_luci-app-samba4=m            # Samba 文件共享
+CONFIG_PACKAGE_luci-app-mini-diskmanager=m  # 磁盘管理
+CONFIG_PACKAGE_luci-app-hd-idle=m           # 硬盘休眠
+CONFIG_PACKAGE_luci-app-usb-printer=m       # USB 打印服务
+CONFIG_PACKAGE_luci-app-vsftpd=m            # FTP 服务
+CONFIG_PACKAGE_luci-app-verysync=m          # 微力同步前端
+CONFIG_PACKAGE_verysync=m                   # 微力同步后端
+
+
+# ------------------------------------------------------------------------
+#  科学上网 / VPN / 内网穿透
+# ------------------------------------------------------------------------
+#  维护提示：代理、VPN、组网、穿透插件集中在这里。
+CONFIG_PACKAGE_luci-app-homeproxy=y         # HomeProxy 代理
+CONFIG_PACKAGE_luci-app-nikki=m             # nikki 前端
+CONFIG_PACKAGE_nikki=m                      # nikki 后端
+CONFIG_PACKAGE_luci-app-miaomiaowu=m        # 订阅管理
+CONFIG_PACKAGE_luci-app-easytier=y          # EasyTier 组网
+CONFIG_PACKAGE_easytier-noweb=y             # EasyTier 无 Web 版本
+CONFIG_PACKAGE_luci-app-frpc=y              # FRP 内网穿透客户端
+CONFIG_PACKAGE_frpc=y                       # FRP 客户端后端
+CONFIG_PACKAGE_luci-app-frps=m              # FRP 内网穿透服务端
+CONFIG_PACKAGE_frps=m                       # FRP 服务端后端
+
+
+# ------------------------------------------------------------------------
+#  主题
+# ------------------------------------------------------------------------
+CONFIG_PACKAGE_luci-theme-noobwrt=m         # NoobWrt 主题
+CONFIG_PACKAGE_luci-theme-aurora=y          # aurora 主题
+CONFIG_PACKAGE_luci-app-aurora-config=y     # aurora 主题配置工具
+
+
+# ========================================================================
+#  设备差异配置（默认全部注释，按设备启用）
+# ========================================================================
+#  注意：
+#  1. 以下区块只保留与上方公共配置不同的项目。
+#  2. 编译时只去掉目标设备区块中 CONFIG_ 行前的单个 “#”，其余设备区块保持注释。
+#  3. 同时启用多个设备区块会导致机型目标与同名插件配置相互覆盖。
+
+
+# ------------------------------------------------------------------------
+#  CMIOT-AX18-WIFI（高通 IPQ60xx / 和目 AX18、兆能 M2）
+# ------------------------------------------------------------------------
+#CONFIG_TARGET_qualcommax=y
+#CONFIG_TARGET_qualcommax_ipq60xx=y                                        # 高通 IPQ60xx 平台
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_cmiot_ax18=y               # 和目AX18、兆能M2
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_glinet_gl-ax1800=n         # GL AX1800
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_glinet_gl-axt1800=n        # GL AXT1800
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-ss-01=n         # 京东云亚瑟
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=n         # 京东云雅典娜
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-07=n         # 京东云太乙
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_linksys_mr7350=n           # MR7350
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_qihoo_360v6=n              # 奇虎360V6
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_redmi_ax5-jdcloud=n        # 京东云AX5
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_xiaomi_rm1800=n            # 小米RM1800
+
+#CONFIG_PACKAGE_sqm-scripts-nss=y            # 支持 NSS 的 SQM（部分平台会导致拨号断开，慎用）
+#CONFIG_PACKAGE_luci-app-attendedsysupgrade=n # 在线升级（已禁用）
+#CONFIG_PACKAGE_luci-app-openclash=m         # OpenClash 代理
+#CONFIG_PACKAGE_luci-app-subconverter=m      # 订阅转换（目前 2026/07/03 只支持 aarch64）
+#CONFIG_PACKAGE_luci-theme-fluent=m          # fluent 主题
+
+# 保留说明（原文件注释，保持关闭）
+#CONFIG_PACKAGE_kmod-ath11k=y
+#CONFIG_PACKAGE_kmod-ath11k-ahb=y
+#CONFIG_PACKAGE_kmod-ath11k-pci=n
+#CONFIG_PACKAGE_ath11k-firmware-ipq6018=y
+#CONFIG_PACKAGE_ath11k-firmware-qcn9074=n
+#CONFIG_PACKAGE_wpad-openssl=y
+#CONFIG_PACKAGE_hostapd-common=y
+
+
+# ------------------------------------------------------------------------
+#  GL-MT6000-WIFI（联发科 MT7986 / Filogic 平台）
+# ------------------------------------------------------------------------
+#CONFIG_TARGET_mediatek=y
+#CONFIG_TARGET_mediatek_filogic=y
+#CONFIG_TARGET_MULTI_PROFILE=y                # 多机型并行输出
+#CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_glinet_gl-mt6000=y
+
+#CONFIG_PACKAGE_luci-app-wifischedule=y      # Wi-Fi 定时开关
+#CONFIG_PACKAGE_luci-app-adguardhome=y       # 去广告
+#CONFIG_PACKAGE_luci-app-openlist=m          # OpenList 文件索引
+#CONFIG_PACKAGE_luci-app-attendedsysupgrade=m # 在线升级
+#CONFIG_PACKAGE_luci-app-openclash=y         # OpenClash 代理
+#CONFIG_PACKAGE_luci-theme-fluent=y          # fluent 主题
+
+# 保留说明（原文件注释，保持关闭）
+#CONFIG_PACKAGE_luci-app-wrtbwmon=y          # wrtbwmon 实时流量统计
+#CONFIG_PACKAGE_wrtbwmon=y                   # wrtbwmon 后端
+#CONFIG_PACKAGE_luci-app-subconverter=m      # 订阅转换（目前 2026/07/03 只支持 aarch64）
+#CONFIG_PACKAGE_luci-app-quickstart=m        # 快捷配置
+
+
+# ------------------------------------------------------------------------
+#  JD-AX6600-WIFI（高通 IPQ60xx / 京东云雅典娜）
+# ------------------------------------------------------------------------
+#CONFIG_TARGET_qualcommax=y
+#CONFIG_TARGET_qualcommax_ipq60xx=y                                        # 高通 IPQ60xx 平台
+#CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y         # 京东云雅典娜
+
+#CONFIG_PACKAGE_luci-app-athena-led=y        # 雅典娜 LED 管理
+#CONFIG_PACKAGE_sqm-scripts-nss=y            # 支持 NSS 的 SQM（部分平台会导致拨号断开，慎用）
+#CONFIG_PACKAGE_luci-app-wifischedule=y      # Wi-Fi 定时开关
+#CONFIG_PACKAGE_luci-app-adguardhome=y       # 去广告
+#CONFIG_PACKAGE_luci-app-openlist=m          # OpenList 文件索引
+#CONFIG_PACKAGE_luci-app-attendedsysupgrade=m # 在线升级
+#CONFIG_PACKAGE_luci-app-openclash=y         # OpenClash 代理
+#CONFIG_PACKAGE_luci-app-ninjaconnector2=y   # Ninja OpenClash 订阅连接器
+#CONFIG_PACKAGE_luci-theme-fluent=y          # fluent 主题
+
+# 保留说明（原文件注释，保持关闭）
+#CONFIG_PACKAGE_luci-app-wrtbwmon=y          # wrtbwmon 实时流量统计
+#CONFIG_PACKAGE_wrtbwmon=y                   # wrtbwmon 后端
+#CONFIG_PACKAGE_luci-app-subconverter=m      # 订阅转换（目前 2026/07/03 只支持 aarch64）
+#CONFIG_PACKAGE_luci-app-quickstart=m        # 快捷配置
