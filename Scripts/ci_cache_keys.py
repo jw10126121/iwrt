@@ -58,6 +58,7 @@ def main():
         )
     }
     source_hash = required("REPO_GIT_HASH")
+    config_label = required("WRT_CONFIG_LABEL")
     config = Path(required("OPENWRT_PATH")) / ".config"
     config_hash = toolchain_config_hash(config)
     stable_scope = {
@@ -70,7 +71,8 @@ def main():
     stable_hash = fingerprint({**stable_scope, "config": config_hash})
     image_hash = fingerprint({"ImageVersion": toolchain_scope["ImageVersion"]})[:16]
     print(f"TOOLCHAIN_CACHE_KEY=toolchain-v4-{stable_hash}-{image_hash}-{source_hash}")
-    print(f"TOOLCHAIN_CACHE_RESTORE_KEY=toolchain-v4-{stable_hash}-")
+    # ImageVersion 参与恢复前缀；不同 Runner 镜像不要直接复用 host/toolchain 二进制。
+    print(f"TOOLCHAIN_CACHE_RESTORE_KEY=toolchain-v4-{stable_hash}-{image_hash}-")
 
     # ccache 自行验证编译器、源码和参数；Runner 镜像升级不应让已有对象全部失效。
     ccache_scope = {
@@ -80,7 +82,11 @@ def main():
             "DEVICE_TARGET", "DEVICE_SUBTARGET",
         )
     }
-    print(f"CCACHE_CACHE_PREFIX=ccache-v3-{fingerprint(ccache_scope)}")
+    ccache_prefix = f"ccache-v4-{fingerprint(ccache_scope)}"
+    print(f"CCACHE_CACHE_PREFIX={ccache_prefix}")
+    # run_id 不能出现在精确键中，否则每次运行都只能命中 restore-keys，
+    # actions/cache 的 cache-hit 永远是 false。配置标签用于隔离不同设备的缓存。
+    print(f"CCACHE_CACHE_KEY={ccache_prefix}-{config_label}")
 
 
 if __name__ == "__main__":

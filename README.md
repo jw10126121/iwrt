@@ -6,8 +6,10 @@
 
 | `SOURCE_TYPE` | 上游源码 | 用途 |
 |---|---|---|
-| `vwrt` | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) 或官方 ImmortalWrt | 默认源码；高通设备使用 VIKINGYFY 源，其他设备使用官方源 |
+| `VIKINGYFY` | [VIKINGYFY/immortalwrt](https://github.com/VIKINGYFY/immortalwrt) | 高通设备的 VIKINGYFY ImmortalWrt fork |
 | `libwrt` | [LiBwrt/LibWrt](https://github.com/LiBwrt/LibWrt) | 高通设备的 NSS 源码 |
+
+手动选择只提供 `VIKINGYFY` 和 `libwrt`。非 IPQ 设备（例如 MT6000）会自动使用 [官方 ImmortalWrt](https://github.com/immortalwrt/immortalwrt)，内部源码风味记为 `immortalwrt`；旧调用传入的 `vwrt` 仍保留兼容处理。
 
 Lean 源码、fw3 防火墙和 IPK 包格式已不再支持。手动构建入口为 `.github/workflows/DEFAULT.yml`，设备配置位于 `Config/`，构建脚本位于 `Scripts/`。
 

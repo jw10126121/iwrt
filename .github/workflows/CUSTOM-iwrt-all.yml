@@ -19,11 +19,11 @@ on:
         type: boolean
         default: false
       SOURCE_TYPE:
-        description: '源码类型'
+        description: '源码类型（非 IPQ 设备自动使用官方 ImmortalWrt）'
         required: false
         type: choice
         options:
-          - vwrt
+          - VIKINGYFY
           - libwrt
         default: 'libwrt'
       WRT_SOURCE_HASH_INFO:
@@ -41,7 +41,7 @@ on:
 permissions: write-all
 
 #CI任务
-# 四个设备统一使用外部选择的 SOURCE_TYPE；libwrt 自动使用 apk，vwrt 沿用源码默认的 apk。
+# 四个设备统一使用外部选择的 SOURCE_TYPE；非 IPQ 设备自动切换为官方 ImmortalWrt。
 jobs:
   # cmiot_ax18_nowifi_fw4:
   #   name: cmiot-ax18-nowifi-fw4-base

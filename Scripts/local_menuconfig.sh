@@ -36,7 +36,7 @@ show_help() {
   WRT_DIY_FEEDS          自定义 feeds 脚本，默认 diy_feeds.sh
   WRT_DEFAULT_LANIP      默认 LAN IP，默认 192.168.0.1
   WRT_SOURCE_HASH_INFO   可选源码 commit hash
-  SOURCE_TYPE            源码类型，默认 auto；支持 vwrt、libwrt
+  SOURCE_TYPE            源码类型，默认 auto；支持 VIKINGYFY、libwrt；非 IPQ 自动使用 immortalwrt
 
 本地辅助参数：
   WRT_THEME_NAME         默认 auto（默认使用 Aurora）

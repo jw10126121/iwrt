@@ -205,7 +205,11 @@ wrt_wifi_password="${WRT_WIFI_PASSWORD:-88886666}"
 wrt_repo_url="${WRT_REPO_URL:?WRT_REPO_URL is required}"
 wrt_repo_branch="${WRT_REPO_BRANCH:?WRT_REPO_BRANCH is required}"
 repo_git_hash="${REPO_GIT_HASH:-}"
-source_flavor="${SOURCE_TYPE:-vwrt}"
+source_flavor="${SOURCE_TYPE:-immortalwrt}"
+source_flavor_display="${source_flavor}"
+if [ "${source_flavor}" = "vikingyfy" ] || [ "${source_flavor}" = "VIKINGYFY" ]; then
+    source_flavor_display='VIKINGYFY'
+fi
 device_target="${DEVICE_TARGET:-}"
 device_subtarget="${DEVICE_SUBTARGET:-}"
 device_arch="$(sed -n 's/^CONFIG_TARGET_ARCH_PACKAGES="\([^"]*\)"/\1/p' "${openwrt_path}/.config" | head -n1 || true)"
@@ -294,7 +298,7 @@ system_content="编译开始：${start_time_tag}
 支持设备：${rendered_device_profile}
 固件类型：${wrt_has_lite_text}
 支持平台：${device_target}-${device_subtarget}
-源码风味：${source_flavor}
+源码风味：${source_flavor_display}
 FW环境：${fw_stack}
 FRP角色：${frp_role}
 设备架构：${device_arch}

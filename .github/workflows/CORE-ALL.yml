@@ -108,7 +108,7 @@ env:
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   WRT_SOURCE_HASH_INFO: ${{inputs.WRT_SOURCE_HASH_INFO}}
   WRT_DEVICE: ${{inputs.WRT_DEVICE}}                          # 设备名
-  SOURCE_TYPE: ${{inputs.SOURCE_TYPE}}                        # 源码类型 vwrt/libwrt/auto
+  SOURCE_TYPE: ${{inputs.SOURCE_TYPE}}                        # 源码类型 VIKINGYFY/libwrt；非 IPQ 自动解析为 immortalwrt
   WRT_REPO_URL: ${{ inputs.WRT_REPO_URL }}                    # 显式仓库优先于按设备推断
   WRT_REPO_BRANCH: ${{ inputs.WRT_REPO_BRANCH }}
   WRT_FIREWALL: fw4                                      # 固定使用 fw4
@@ -209,6 +209,10 @@ jobs:
         WRT_DEVICE="${WRT_DEVICE,,}"
         echo "WRT_DEVICE=$WRT_DEVICE" >> $GITHUB_ENV
 
+        # 源码类型输入允许使用界面展示的大写 VIKINGYFY，内部统一使用小写比较。
+        SOURCE_TYPE="${SOURCE_TYPE,,}"
+        echo "SOURCE_TYPE=$SOURCE_TYPE" >> $GITHUB_ENV
+
         WRT_HAS_WIFI=true
         [[ "$WRT_DEVICE" =~ nowifi|wifino|no-wifi|wifi-no ]] && { WRT_HAS_WIFI=false; }
         echo "WRT_HAS_WIFI=$WRT_HAS_WIFI" >> $GITHUB_ENV
@@ -283,32 +287,52 @@ jobs:
         if [[ "$WRT_DEVICE" =~ (cmiot|jd-ax) ]]; then
           IS_QUALCOMMAX=true
         fi
-        # LibWrt 仅覆盖高通设备；非高通设备回退到官方 ImmortalWrt 时，元数据也使用实际源码风味。
+        # LibWrt 仅覆盖高通设备；非高通设备回退到官方 ImmortalWrt。
         if [ -z "${WRT_REPO_URL}" ] && [ "${SOURCE_TYPE}" = "libwrt" ] && [ "${IS_QUALCOMMAX}" != "true" ]; then
-          SOURCE_TYPE="vwrt"
-          echo "SOURCE_TYPE=$SOURCE_TYPE" >> "$GITHUB_ENV"
-          echo "【Lin】当前设备不属于高通平台，源码风味回退为 vwrt（官方 ImmortalWrt）"
+          SOURCE_TYPE="immortalwrt"
+          echo "【Lin】当前设备不属于高通平台，源码风味回退为 immortalwrt（官方 ImmortalWrt）"
         fi
         if [ -n "${WRT_REPO_URL}" ]; then
           echo "【Lin】使用传入源码：[${WRT_REPO_BRANCH}] ${WRT_REPO_URL}"
         elif [ "${SOURCE_TYPE}" = "libwrt" ] && [ "${IS_QUALCOMMAX}" = "true" ]; then
-          # LibWrt 仅用于高通设备；MT6000 等非高通设备沿用 vwrt 的官方 ImmortalWrt 路径。
+          # LibWrt 仅用于高通设备；MT6000 等非高通设备使用官方 ImmortalWrt。
           WRT_REPO_URL="https://github.com/LiBwrt/LibWrt"
           WRT_REPO_BRANCH="25.12-nss"
-        elif [ "${SOURCE_TYPE}" = "vwrt" ] && [ "${IS_QUALCOMMAX}" = "true" ]; then
+        elif [[ "${SOURCE_TYPE}" =~ ^(vwrt|vikingyfy)$ ]] && [ "${IS_QUALCOMMAX}" = "true" ]; then
           WRT_REPO_URL="https://github.com/VIKINGYFY/immortalwrt"
           WRT_REPO_BRANCH="main"
         else
           WRT_REPO_URL="https://github.com/immortalwrt/immortalwrt"
           WRT_REPO_BRANCH="master"
         fi
+
+        # 以最终选择的仓库作为真实源码风味，避免 SOURCE_TYPE 的历史别名
+        # （vwrt）覆盖官方 ImmortalWrt 的实际来源。
+        case "${WRT_REPO_URL}" in
+          *LiBwrt/LibWrt*)
+            SOURCE_TYPE="libwrt"
+            ;;
+          *VIKINGYFY/immortalwrt*)
+            SOURCE_TYPE="vikingyfy"
+            ;;
+          *immortalwrt/immortalwrt*)
+            SOURCE_TYPE="immortalwrt"
+            ;;
+          *)
+            [ "${SOURCE_TYPE}" = "auto" ] && SOURCE_TYPE="immortalwrt"
+            ;;
+        esac
+        SOURCE_TYPE_DISPLAY="$SOURCE_TYPE"
+        [ "$SOURCE_TYPE" = "vikingyfy" ] && SOURCE_TYPE_DISPLAY='VIKINGYFY'
+        echo "SOURCE_TYPE_DISPLAY=$SOURCE_TYPE_DISPLAY" >> "$GITHUB_ENV"
+        echo "SOURCE_TYPE=$SOURCE_TYPE" >> "$GITHUB_ENV"
         echo "WRT_REPO_URL=${WRT_REPO_URL}" >> $GITHUB_ENV
         echo "WRT_REPO_BRANCH=${WRT_REPO_BRANCH}" >> $GITHUB_ENV
         if [ -n "${WRT_SOURCE_HASH_INFO}" ]; then
           echo "【Lin】源码HASH值：${WRT_SOURCE_HASH_INFO}"
         fi
         echo "【Lin】源码信息：[${WRT_REPO_BRANCH}] ${WRT_REPO_URL}"
-        echo "【Lin】源码类型：${SOURCE_TYPE}"
+        echo "【Lin】源码类型：${SOURCE_TYPE_DISPLAY:-$SOURCE_TYPE}"
 
     - name: Configure Git (调整 Git 下载参数)
       run: |
@@ -320,7 +344,7 @@ jobs:
     - name: Clone OpenWrt Source (克隆 OpenWrt 源码)
       id: clone_source
       run: |
-        echo "【Lin】源码类型：${SOURCE_TYPE}"
+        echo "【Lin】源码类型：${SOURCE_TYPE_DISPLAY:-$SOURCE_TYPE}"
         echo "【Lin】克隆源代码：【$WRT_REPO_BRANCH】$WRT_REPO_URL"
         rm -rf "$OPENWRT_PATH"
         mkdir -p "$(dirname "$OPENWRT_PATH")"
@@ -346,12 +370,9 @@ jobs:
         bash "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/apk-tools.sh"
         VERSION_INFO=$(git show -s --date=short --format="作者: %an<br/>时间: %cd<br/>内容: %s<br/>hash: %H")
         echo "VERSION_INFO=$VERSION_INFO" >> $GITHUB_ENV
-        # 源码类型：优先使用传入值，auto 时从源码目录检测
-        if [ "${SOURCE_TYPE}" = "auto" ]; then
-          SOURCE_TYPE="vwrt"
-        fi
+        # 源码类型已在选择仓库后按实际仓库归一化；这里仅保留给后续步骤。
         echo "SOURCE_TYPE=$SOURCE_TYPE" >> $GITHUB_ENV
-        echo "【Lin】源码类型：${SOURCE_TYPE}"
+        echo "【Lin】源码类型：${SOURCE_TYPE_DISPLAY:-$SOURCE_TYPE}"
         # 所有源码统一使用 APK 包管理器和 fw4 防火墙。
         WRT_PACKAGE_MANAGER="apk"
         WRT_FIREWALL="fw4"
@@ -502,7 +523,7 @@ jobs:
       if: env.CACHE_TOOLCHAIN == 'true'
       uses: actions/cache/restore@v5
       with:
-        key: ${{ env.CCACHE_CACHE_PREFIX }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ env.WRT_CONFIG_LABEL }}
+        key: ${{ env.CCACHE_CACHE_KEY }}
         restore-keys: |
           ${{ env.CCACHE_CACHE_PREFIX }}-
         path: |
@@ -530,8 +551,10 @@ jobs:
       run: |
         echo "【Lin】工具链精确命中：${{ steps.restore_toolchain_cache.outputs.cache-hit }}"
         echo "【Lin】工具链恢复键：${{ steps.restore_toolchain_cache.outputs.cache-matched-key }}"
+        echo "【Lin】工具链实际恢复：${{ steps.restore_toolchain_cache.outputs.cache-matched-key != '' }}"
         echo "【Lin】ccache 精确命中：${{ steps.restore_ccache_cache.outputs.cache-hit }}"
         echo "【Lin】ccache 恢复键：${{ steps.restore_ccache_cache.outputs.cache-matched-key }}"
+        echo "【Lin】ccache 实际恢复：${{ steps.restore_ccache_cache.outputs.cache-matched-key != '' }}"
         if command -v ccache >/dev/null 2>&1; then
           CCACHE_DIR="$OPENWRT_PATH/.ccache" ccache --show-stats || true
         fi
@@ -550,7 +573,7 @@ jobs:
         echo "【Lin】本次编译条件摘要"
         echo "【Lin】逻辑设备名：$WRT_DEVICE"
         echo "【Lin】设备别名：${DEVICE_ALIAS:-unknown}"
-        echo "【Lin】源码类型：$SOURCE_TYPE"
+        echo "【Lin】源码类型：${SOURCE_TYPE_DISPLAY:-$SOURCE_TYPE}"
         echo "【Lin】源码仓库：$WRT_REPO_URL"
         echo "【Lin】源码分支：$WRT_REPO_BRANCH"
         echo "【Lin】源码提交：${REPO_GIT_HASH:-未知}"
@@ -896,11 +919,11 @@ jobs:
           ${{ env.OPENWRT_PATH }}/staging_dir/tool*
 
     - name: Save ccache Cache
-      if: always() && env.CACHE_TOOLCHAIN == 'true' && env.CCACHE_CACHE_PREFIX != '' && steps.evaluate_cache_save_inputs.outputs.ccache_present == 'true'
+      if: always() && env.CACHE_TOOLCHAIN == 'true' && env.CCACHE_CACHE_PREFIX != '' && steps.restore_ccache_cache.outputs.cache-hit != 'true' && steps.evaluate_cache_save_inputs.outputs.ccache_present == 'true'
       continue-on-error: true
       uses: actions/cache/save@v5
       with:
-        key: ${{ env.CCACHE_CACHE_PREFIX }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ env.WRT_CONFIG_LABEL }}
+        key: ${{ env.CCACHE_CACHE_KEY }}
         path: |
           ${{ env.OPENWRT_PATH }}/.ccache
 

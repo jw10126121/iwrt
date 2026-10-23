@@ -11,7 +11,7 @@ on:
       SOURCE_TYPE:
         required: false
         type: string
-        default: 'vwrt'
+        default: 'VIKINGYFY'
       WRT_FIREWALL:
         required: false
         type: string
@@ -93,13 +93,13 @@ on:
           - gl-mt6000-wifi
           - gl-mt6000-nowifi
         default: 'gl-mt6000-nowifi'
-      # 源码类型：vwrt = ImmortalWrt，libwrt = LiBwrt/LibWrt
+      # 源码类型：VIKINGYFY 或 libwrt；非 IPQ 设备自动使用官方 ImmortalWrt
       SOURCE_TYPE:
         description: '源码类型'
         required: false
         type: choice
         options:
-          - vwrt
+          - VIKINGYFY
           - libwrt
         default: 'libwrt'
       # 防火墙栈固定使用 fw4
@@ -251,7 +251,7 @@ jobs:
     with:
       # 参数化配置
       WRT_DEVICE: ${{ inputs.WRT_DEVICE }}
-      # 源码类型：vwrt / libwrt
+      # 源码类型：VIKINGYFY / libwrt；非 IPQ 设备由核心自动解析为 immortalwrt
       SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
       # 指定源码HASH信息，默认空
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}

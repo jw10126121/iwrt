@@ -22,7 +22,7 @@ on:
         description: '源码 HASH，可选填写 commit hash'
         required: false
         type: string
-        default: '20edd8312f4f307c882f8861f7050ee8da555f24' # '20edd8312f4f307c882f8861f7050ee8da555f24' #'9e08f0c3cf44c6681d7f9b7730adf3fad8db62a5'
+        default: ''
       WRT_FEED_HOST:
         description: 'APK 软件源主机域名'
         required: false
@@ -41,7 +41,7 @@ jobs:
   #     WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
   #     WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
   #     WRT_DEVICE: cmiot-ax18-nowifi
-  #     SOURCE_TYPE: 'vwrt'
+  #     SOURCE_TYPE: 'VIKINGYFY'
   #     WRT_FIREWALL: fw4
   #     WRT_OVERLAYS: ''
   #     WRT_DIY_SETTING: diy_config.sh
@@ -59,7 +59,7 @@ jobs:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: cmiot-ax18-nowifi
-      SOURCE_TYPE: 'vwrt'
+      SOURCE_TYPE: 'VIKINGYFY'
       WRT_FIREWALL: fw4
       WRT_OVERLAYS: frps
       WRT_DIY_SETTING: diy_config.sh
@@ -77,7 +77,7 @@ jobs:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: gl-mt6000-nowifi
-      SOURCE_TYPE: 'vwrt'
+      SOURCE_TYPE: 'VIKINGYFY'
       WRT_FIREWALL: fw4
       WRT_OVERLAYS: ''
       WRT_DIY_SETTING: diy_config.sh
@@ -95,7 +95,7 @@ jobs:
   #     WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
   #     WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
   #     WRT_DEVICE: gl-mt6000-wifi
-  #     SOURCE_TYPE: 'vwrt'
+  #     SOURCE_TYPE: 'VIKINGYFY'
   #     WRT_FIREWALL: fw4
   #     WRT_OVERLAYS: ''
   #     WRT_DIY_SETTING: diy_config.sh
@@ -113,7 +113,7 @@ jobs:
       WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: jd-ax6600-wifi
-      SOURCE_TYPE: 'vwrt'
+      SOURCE_TYPE: 'VIKINGYFY'
       WRT_FIREWALL: fw4
       WRT_OVERLAYS: ''
       WRT_DIY_SETTING: diy_config.sh

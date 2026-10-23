@@ -604,7 +604,7 @@ apply_iwrt_legacy_package_overrides() {
 
 }
 
-# iwrt 配置族源码风格：vwrt/libwrt 共用。
+# iwrt 配置族源码风格：vwrt/vikingyfy/immortalwrt/libwrt 共用。
 apply_iwrt_package_overrides() {
     echo "【Lin】启用 iwrt 配置族专属包覆盖"
     # UPDATE_PACKAGE "luci-theme-noobwrt" "nooblk-98/luci-theme-noobwrt" "master"

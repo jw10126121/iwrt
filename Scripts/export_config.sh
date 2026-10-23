@@ -23,15 +23,15 @@ output_config=''
 cleanup_files=''
 context_output=''
 
-# 导出配置时复用源码目录识别；离线时默认使用 vwrt 配置族。
+# 导出配置时复用源码目录识别；离线时使用官方 ImmortalWrt 作为安全默认值。
 resolve_export_source_type() {
-	local requested_type="${SOURCE_TYPE:-vwrt}"
+	local requested_type="${SOURCE_TYPE:-auto}"
 
 	if [ "$requested_type" = "auto" ]; then
 		if [ -n "${OPENWRT_PATH:-}" ] && [ -d "${OPENWRT_PATH}" ]; then
 			resolve_source_type "$requested_type" "$OPENWRT_PATH"
 		else
-			printf '%s\n' 'vwrt'
+			printf '%s\n' 'immortalwrt'
 		fi
 	else
 		resolve_source_type "$requested_type" .
