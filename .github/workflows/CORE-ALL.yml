@@ -515,8 +515,11 @@ jobs:
         # staging_dir 中的 stamp 时间戳可能早于本次源码 checkout；刷新后可避免
         # make 因旧时间戳误判目标已是最新。target 目录不在缓存路径中，因此排除它。
         if [ -d staging_dir ]; then
-          find staging_dir -type d -name stamp -not -path '*/target-*/*' -not -path '*/target/*' \
-            -exec find {} -type f -exec touch {} +
+          while IFS= read -r stamp_dir; do
+            find "$stamp_dir" -type f -exec touch {} +
+          done < <(find staging_dir -type d -name stamp \
+            -not -path 'staging_dir/target-*/*' \
+            -not -path 'staging_dir/target/*')
         fi
         mkdir -p tmp
         echo '1' > tmp/.build
