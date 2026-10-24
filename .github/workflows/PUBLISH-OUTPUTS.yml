@@ -14,6 +14,10 @@ on:
         required: false
         type: boolean
         default: false
+      WRT_UPLOAD_ARTIFACTS:
+        required: false
+        type: boolean
+        default: true
       WRT_EXPECTED_BUILDS:
         required: true
         type: number
@@ -29,7 +33,7 @@ permissions:
 
 jobs:
   publish:
-    name: 按型号整理固件、按平台汇总插件并统一发布
+    name: 整理固件、合并软件源并生成下载归档
     runs-on: ubuntu-24.04
     steps:
       - name: 检出项目
@@ -67,10 +71,16 @@ jobs:
         run: |
           python3 Scripts/merge_apk_feeds.py \
             --input feed-artifacts --output public \
-            --packages-output packages --archives-output package-archives \
+            --packages-output merged-feed-packages \
             --expected-count "$EXPECTED_BUILDS" --host "$FEED_HOST"
 
-      - name: 保存合并后的 APK 包归档
+      - name: 单独整理 Artifact/Release 用的平台 APK 包
+        run: |
+          python3 Scripts/ci_organize_apk_packages.py \
+            --input merged-feed-packages/feed --output package-archives
+
+      - name: 保存平台 APK 包 Artifact
+        if: inputs.WRT_UPLOAD_ARTIFACTS
         uses: actions/upload-artifact@v6.0.0
         with:
           name: apk-packages
@@ -79,6 +89,7 @@ jobs:
           if-no-files-found: error
 
       - name: 保存按设备型号整理的固件
+        if: inputs.WRT_UPLOAD_ARTIFACTS
         uses: actions/upload-artifact@v6.0.0
         with:
           name: firmware

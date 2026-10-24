@@ -66,10 +66,13 @@ class FeedWorkflowTest(unittest.TestCase):
         uploads = [step for step in steps if "actions/upload-artifact@" in step.get("uses", "")]
         self.assertEqual({step["with"]["name"] for step in uploads}, {"firmware", "apk-packages"})
         self.assertTrue(all(step["with"]["if-no-files-found"] == "error" for step in uploads))
+        self.assertTrue(all(step["if"] == "inputs.WRT_UPLOAD_ARTIFACTS" for step in uploads))
         commands = "\n".join(step.get("run", "") for step in steps)
         self.assertIn("ci_build_outputs.py organize", commands)
         self.assertIn("--firmware-input firmware-artifacts", commands)
         self.assertIn("merge_apk_feeds.py", commands)
+        self.assertIn("ci_organize_apk_packages.py", commands)
+        self.assertIn("--input merged-feed-packages/feed --output package-archives", commands)
         releases = [step for step in steps if "ci_build_outputs.py release \\" in step.get("run", "")]
         self.assertEqual(len(releases), 1)
         self.assertEqual(releases[0]["if"], "inputs.WRT_RELEASE_FIRMWARE")
