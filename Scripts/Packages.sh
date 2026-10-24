@@ -614,6 +614,10 @@ apply_iwrt_package_overrides() {
 
     UPDATE_PACKAGE "momo" "nikkinikki-org/OpenWrt-momo" "main"
     UPDATE_PACKAGE "nikki" "nikkinikki-org/OpenWrt-nikki" "main"
+    # mihomo-meta 默认把当前墙钟时间写进二进制，导致并行设备构建的同版本 APK 不同。
+    # 改用源码固定时间戳，保证同一源码提交可安全合并软件源。
+    bash "${current_script_dir}/lib/fix_mihomo_build_time.sh" \
+        "${package_workdir}/OpenWrt-nikki/mihomo-meta/Makefile"
     # UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "dev" "pkg"
     UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
     UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"

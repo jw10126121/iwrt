@@ -24,6 +24,25 @@ get_notify_body() {
         return 0
     fi
 
+    # 编译结束通知运行在 CORE 任务中，发布任务生成的 README 尚不存在。
+    # 复用 readme.sh 从最终 .config 生成同格式正文，确保结果通知也包含插件清单。
+    if [ -n "${OPENWRT_PATH:-}" ] && [ -f "${OPENWRT_PATH}/.config" ] && \
+       [ -n "${GITHUB_WORKSPACE:-}" ] && [ -n "${WRT_DIR_SCRIPTS:-}" ]; then
+        local tmp_desc_file
+        tmp_desc_file="$(mktemp "${TMPDIR:-/tmp}/notify-desc.XXXXXX.txt")"
+        if bash "${GITHUB_WORKSPACE}/${WRT_DIR_SCRIPTS}/readme.sh" \
+            -c "${OPENWRT_PATH}/.config" \
+            -o "${tmp_desc_file}" \
+            -s "${system_content:-}" \
+            -a "${WRT_MINE_SAY:-}" \
+            -r 'false'; then
+            cat "${tmp_desc_file}"
+            rm -f "${tmp_desc_file}"
+            return 0
+        fi
+        rm -f "${tmp_desc_file}"
+    fi
+
     printf '%s\n' "${system_content:-}"
 }
 

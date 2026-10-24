@@ -97,23 +97,23 @@ jobs:
       WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
     secrets: inherit
 
-  gl_mt6000_wifi_fw4:
-    name: gl-mt6000-wifi-fw4-base
-    uses: ./.github/workflows/CORE-ALL.yml
-    with:
-      WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
-      WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
-      WRT_DEVICE: gl-mt6000-wifi
-      SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
-      WRT_PACKAGE_MANAGER: apk
-      WRT_FIREWALL: fw4
-      WRT_OVERLAYS: ''
-      WRT_DIY_SETTING: diy_config.sh
-      WRT_DIYPackages: Packages.sh
-      WRT_DIY_FEEDS: diy_feeds.sh
-      WRT_DEFAULT_LANIP: 192.168.0.1
-      WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
-    secrets: inherit
+  # gl_mt6000_wifi_fw4:
+  #   name: gl-mt6000-wifi-fw4-base
+  #   uses: ./.github/workflows/CORE-ALL.yml
+  #   with:
+  #     WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+  #     WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
+  #     WRT_DEVICE: gl-mt6000-wifi
+  #     SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
+  #     WRT_PACKAGE_MANAGER: apk
+  #     WRT_FIREWALL: fw4
+  #     WRT_OVERLAYS: ''
+  #     WRT_DIY_SETTING: diy_config.sh
+  #     WRT_DIYPackages: Packages.sh
+  #     WRT_DIY_FEEDS: diy_feeds.sh
+  #     WRT_DEFAULT_LANIP: 192.168.0.1
+  #     WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
+  #   secrets: inherit
 
   jd_ax6600_wifi_fw4:
     name: jd-ax6600-wifi-fw4-base
