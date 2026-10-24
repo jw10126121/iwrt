@@ -31,8 +31,19 @@ BASE_DEPENDENCIES = (
 )
 
 
-def apk_metadata(path):
+def apk_metadata(path, apk_tool=None):
     """读取 APK 内的 control 元数据，供每个插件目录展开运行时依赖。"""
+    with path.open("rb") as package:
+        magic = package.read(4)
+    if magic.startswith(b"ADB"):
+        require(apk_tool is not None, f"ADB 格式 APK 缺少 host apk 工具：{path.name}")
+        output = subprocess.check_output(
+            [str(apk_tool), "adbdump", "--format", "json", str(path)], text=True)
+        info = json.loads(output).get("info", {})
+        require(info.get("name"), f"ADB 格式 APK 缺少 name 字段：{path.name}")
+        return {"name": info["name"], "version": info.get("version", ""),
+                "provides": info.get("provides", []), "depends": info.get("depends", [])}
+
     with tarfile.open(path, "r:*") as package:
         control_member = next((member for member in package.getmembers()
                                if member.name.lstrip("./") == "control.tar.gz"), None)
@@ -182,10 +193,10 @@ def organize(args):
             Path(item["path"]).is_relative_to(path.relative_to(args.input)) for path in selected_dirs)]
         package_records = []
         for package in sorted(repositories["userspace"].glob("*.apk")):
-            package_records.append({"path": package, "meta": apk_metadata(package), "kernel_id": None})
+            package_records.append({"path": package, "meta": apk_metadata(package, args.apk), "kernel_id": None})
         for directory in repositories["kmods"]:
             for package in sorted(directory.glob("*.apk")):
-                package_records.append({"path": package, "meta": apk_metadata(package),
+                package_records.append({"path": package, "meta": apk_metadata(package, args.apk),
                                        "kernel_id": directory.name})
         by_name = {}
         by_provide = {}

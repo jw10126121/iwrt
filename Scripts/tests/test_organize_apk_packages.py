@@ -112,6 +112,44 @@ class OrganizeApkPackagesTest(unittest.TestCase):
             self.assertTrue((second_platform_dir / "packages/aarch64_cortex-a53/demo-1.0.apk").is_file())
             self.assertFalse(any(second_platform_dir.rglob("*.zip")))
 
+    def test_adb_packages_use_host_apk_metadata_for_dependency_closure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            feed = root / "feed"
+            userspace = feed / "immortalwrt/abc1234/packages/mediatek/filogic/aarch64_cortex-a53"
+            userspace.mkdir(parents=True)
+            (userspace / "packages.adb").write_text("index")
+            (userspace / "luci-app-adbdemo_1.apk").write_bytes(b"ADBd" + b"binary package body")
+            write_test_apk(userspace / "libhelper_1.apk", "libhelper")
+            (feed / "excluded-packages.json").write_text("[]\n")
+
+            apk_tool = root / "run-apk"
+            apk_tool.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, sys\n"
+                "if sys.argv[1:4] == ['adbdump', '--format', 'json'] and len(sys.argv) == 5:\n"
+                "    print(json.dumps({'info': {'name': 'luci-app-adbdemo', 'version': '1.0', "
+                "'depends': ['libhelper>=1'], 'provides': []}, 'paths': [], 'scripts': {}, "
+                "'triggers': [], 'replaces-priority': 0}))\n"
+                "elif sys.argv[1] == 'version':\n"
+                "    print('=')\n"
+                "else:\n"
+                "    raise SystemExit(2)\n"
+            )
+            apk_tool.chmod(0o755)
+
+            archives = root / "archives"
+            artifact = root / "artifact"
+            result = subprocess.run([
+                "python3", str(SCRIPT), "--input", str(feed), "--output", str(archives),
+                "--artifact-output", str(artifact), "--apk", str(apk_tool)],
+                text=True, capture_output=True, check=False)
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            plugin_dir = artifact / "immortalwrt-abc1234-mediatek-filogic-aarch64_cortex-a53-plugins/luci-app-adbdemo"
+            self.assertEqual({path.name for path in plugin_dir.glob("*.apk")}, {
+                "luci-app-adbdemo_1.apk", "libhelper_1.apk"})
+
     def test_plugin_directory_contains_recursive_runtime_and_translation_dependencies(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
