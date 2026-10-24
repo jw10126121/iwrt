@@ -45,7 +45,7 @@ class FeedWorkflowTest(unittest.TestCase):
         uploads = [step for step in steps if "actions/upload-artifact@" in step.get("uses", "")]
         self.assertEqual(len(uploads), 2)
         names = [step["with"]["name"] for step in uploads]
-        self.assertTrue(any(name.endswith("-internal-apk-output") for name in names))
+        self.assertTrue(any(name.endswith("-feed") for name in names))
         self.assertTrue(any(name.endswith("-firmware") for name in names))
         self.assertFalse(any(name.endswith("-apk-packages") for name in names))
         self.assertTrue(all(step["with"]["if-no-files-found"] == "error" for step in uploads))
@@ -58,15 +58,15 @@ class FeedWorkflowTest(unittest.TestCase):
         downloads = [step for step in steps if "actions/download-artifact@" in step.get("uses", "")]
         self.assertEqual(len(downloads), 2)
         self.assertEqual({step["with"]["pattern"] for step in downloads},
-                         {"*-internal-apk-output", "*-firmware"})
+                         {"*-feed", "*-firmware"})
         self.assertTrue(all(not step["with"]["merge-multiple"] for step in downloads))
         deploys = [step for step in steps if "cloudflare/" in step.get("uses", "")]
         self.assertEqual(len(deploys), 1)
         self.assertIn("pages deploy public", deploys[0]["with"]["command"])
         uploads = [step for step in steps if "actions/upload-artifact@" in step.get("uses", "")]
-        self.assertEqual({step["with"]["name"] for step in uploads}, {"firmware", "apk-packages"})
+        self.assertEqual({step["with"]["name"] for step in uploads}, {"apk-packages"})
         self.assertTrue(all(step["with"]["if-no-files-found"] == "error" for step in uploads))
-        self.assertTrue(all(step["if"] == "inputs.WRT_UPLOAD_ARTIFACTS" for step in uploads))
+        self.assertTrue(all(step["if"] == "inputs.WRT_UPLOAD_PACKAGES_ARTIFACT" for step in uploads))
         commands = "\n".join(step.get("run", "") for step in steps)
         self.assertIn("ci_build_outputs.py organize", commands)
         self.assertIn("--firmware-input firmware-artifacts", commands)

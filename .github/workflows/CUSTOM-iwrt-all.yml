@@ -23,8 +23,8 @@ on:
         required: false
         type: boolean
         default: false
-      WRT_UPLOAD_ARTIFACTS:
-        description: '是否保留汇总固件与 APK 包 Artifact'
+      WRT_UPLOAD_PACKAGES_ARTIFACT:
+        description: '是否保留汇总的平台 APK 包 Artifact'
         required: false
         type: boolean
         default: true
@@ -155,6 +155,6 @@ jobs:
       WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_RELEASE_FIRMWARE: ${{ inputs.WRT_RELEASE_FIRMWARE }}
       WRT_RELEASE_PACKAGES: ${{ inputs.WRT_RELEASE_PACKAGES }}
-      WRT_UPLOAD_ARTIFACTS: ${{ inputs.WRT_UPLOAD_ARTIFACTS }}
+      WRT_UPLOAD_PACKAGES_ARTIFACT: ${{ inputs.WRT_UPLOAD_PACKAGES_ARTIFACT }}
       WRT_EXPECTED_BUILDS: 2
     secrets: inherit

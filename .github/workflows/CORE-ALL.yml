@@ -736,7 +736,7 @@ jobs:
       if: steps.finalize_compile.outputs.status == 'success'
       uses: actions/upload-artifact@v6.0.0
       with:
-        name: ${{ env.OUTPUT_NAME_PREFIX }}-internal-apk-output
+        name: ${{ env.OUTPUT_NAME_PREFIX }}-feed
         path: ${{ github.workspace }}/build-output/
         if-no-files-found: error
         retention-days: 1

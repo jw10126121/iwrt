@@ -21,15 +21,15 @@ Lean 源码、fw3 防火墙和 IPK 包格式已不再支持。手动构建入口
 
 ## APK 软件源
 
-一个 CUSTOM YAML 入口代表一个工作流，可以编译一个或多个设备。`CORE-ALL.yml` 是单设备子任务，完成编译后上传 `<构建名>-firmware` 单固件信息 ZIP（固件、配置、说明等）以及短期 feed 中间 artifact（为 Pages feed 提供该设备的 APK 和索引）。CORE 不负责合并软件源或发布 Release。
+一个 CUSTOM YAML 入口代表一个工作流，可以编译一个或多个设备。`CORE-ALL.yml` 是单设备子任务，完成编译后上传 `<构建名>-firmware` 单固件信息 ZIP（固件、配置、说明等）以及短期 `<构建名>-feed` 中间 artifact（为 Pages feed 提供该设备的 APK 和索引）。CORE 不负责合并软件源或发布 Release。
 
-CUSTOM 和 DEFAULT 在全部编译任务成功后，统一调用一次 `PUBLISH-OUTPUTS.yml`。发布任务把各设备 feed 中间包合并并重建索引，只部署一次 Pages；另将固件信息包按型号整理，并把平台 APK 包单独整理为 Release/Artifact 下载归档。Pages feed 和下载归档是两个独立输出。
+CUSTOM 和 DEFAULT 在全部编译任务成功后，统一调用一次 `PUBLISH-OUTPUTS.yml`。发布任务把各设备 feed 中间包合并并重建索引，只部署一次 Pages；另把平台 APK 包单独整理为 Release/Artifact 下载归档。各 CORE 已上传的固件信息包直接作为逐设备 Artifact，PUBLISH 不重复上传汇总固件 Artifact。Pages feed 和下载归档是两个独立输出。
 
 固件在 `firmware/<设备型号>/<构建名>/` 下保存镜像、配置和说明，WiFi/无 WiFi 及其他构建变体分别保留。启用 `WRT_RELEASE_FIRMWARE` 时，由同一发布任务按构建名发布各机型 Release；Release 仅包含固件与配置说明，插件包统一从平台归档下载，不再为机型重复生成 Packages ZIP。
 
 软件源自动收集每台设备最终 `.config` 中所有 `CONFIG_PACKAGE_*=m` 的包、递归依赖（即使依赖是 `=y`），以及本次实际编译生成的全部 `kmod-*` 包及其依赖。其他实际编译的内置包只留在短期内部中间产物中，不进入最终 `apk-packages` 或 Release。
 
-`apk-packages` 汇总 artifact（由 `WRT_UPLOAD_ARTIFACTS` 控制）内部按「源码 + 源码短 hash + target/subtarget + 架构」保存平台 ZIP，例如 `libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-packages.zip`。同源同平台多个机型的插件包合并为一份，IPQ60xx 与 Filogic（MT6000）各有自己的归档。同平台同插件不同版本全部保留；同版本的重复文件名只留按构建 artifact 名排序后的首份。平台 ZIP 由 `ci_organize_apk_packages.py` 从合并后的 feed 包另行整理，面向下载保存，和 Pages 的 feed 目录分开。
+`apk-packages` 汇总 Artifact（由 `WRT_UPLOAD_PACKAGES_ARTIFACT` 控制）内部按「源码 + 源码短 hash + target/subtarget + 架构」保存平台 ZIP，例如 `libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-packages.zip`。同源同平台多个机型的插件包合并为一份，IPQ60xx 与 Filogic（MT6000）各有自己的归档。同平台同插件不同版本全部保留；同版本的重复文件名只留按构建 artifact 名排序后的首份。平台 ZIP 由 `ci_organize_apk_packages.py` 从合并后的 feed 包另行整理，面向下载保存，和 Pages 的 feed 目录分开。
 
 下载 ZIP 内，用户态 APK 位于 `packages/<架构>/`，内核 APK 和 `vermagic` 位于 `kmods/<kernel_id>/`，另含 `平台信息.json`、`说明.txt`、`excluded-packages.json`。该 ZIP 不含软件源索引，不能作为设备 feed 直接使用；设备在线安装使用 Pages 发布目录。ZIP 同样不包含 `offline/` 包。
 
@@ -46,7 +46,7 @@ https://build-<run_id>-<run_attempt>.<软件源域名>/<源码类型>/<源码短
 
 合并时检查产物数量、发布标识、同类源码的提交以及内核 ABI。同路径相同包名和版本按稳定顺序保留一份；不同版本使用不同文件名并一起进入索引。为保证本次站点完整，任何设备失败都会阻止统一发布；重跑时请选择整个工作流，避免混入不同 `run_attempt` 的固件地址。构建用 host apk 及其运行库只包含在短期中间 artifact 中，不会保存到最终归档或部署到站点。APK 大小达到或超过 25 MiB（26,214,400 字节）时会从 feed 和索引中排除，并记录清单；由于其不在 `apk-packages` 中，超限包需自行从构建产物外获取。依赖缺失或版本不兼容会明确报错，不会静默生成缺依赖的软件源。
 
-`WRT_RELEASE_FIRMWARE` 控制是否发布逐设备固件 Release；`WRT_RELEASE_PACKAGES` 独立控制是否创建一个 `apk-packages-build-<run_id>-<run_attempt>` Release，里面是本次各平台下载 ZIP。`WRT_UPLOAD_ARTIFACTS` 控制是否保存汇总的 `firmware` 与 `apk-packages` Artifacts。CORE 的单设备固件信息包和短期 feed 中间产物仍用于 PUBLISH 流程。固件 Release 只包含对应设备的固件、配置和说明；插件包 Release 只包含单独整理的按平台 ZIP。
+`WRT_RELEASE_FIRMWARE` 控制是否发布逐设备固件 Release；`WRT_RELEASE_PACKAGES` 独立控制是否创建一个 `apk-packages-build-<run_id>-<run_attempt>` Release，里面是本次各平台下载 ZIP。`WRT_UPLOAD_PACKAGES_ARTIFACT` 控制是否保存汇总的 `apk-packages` Artifact。CORE 的逐设备固件信息包作为 `<构建名>-firmware` Artifact 直接上传；PUBLISH 下载它们用于可选的逐设备 Release，不再创建重复的汇总 `firmware` Artifact。固件 Release 只包含对应设备的固件、配置和说明；插件包 Release 只包含单独整理的按平台 ZIP。
 
 设备启动后可执行：
 
@@ -62,9 +62,9 @@ apk add <软件包名>
 - `DEFAULT.yml`：单设备手动构建入口。
 - `CUSTOM-iwrt.yml`、`CUSTOM-iwrt-all.yml`：批量构建 ImmortalWrt/LibWrt 设备。
 - `CORE-ALL.yml`：单设备克隆、配置、编译并上传固件信息 ZIP 与 feed 中间产物。
-- `PUBLISH-OUTPUTS.yml`：由入口统一调用，按型号整理固件、一次部署合并后的软件源、单独整理下载用平台 APK 包，并按开关保存汇总 Artifact 或发布 Release。
+- `PUBLISH-OUTPUTS.yml`：由入口统一调用，下载并整理各型号固件信息包供可选 Release，部署合并后的软件源，单独整理平台 APK 下载包并按开关保存 Artifact 或发布 Release。
 
-所有 workflow 注释、README 和脚本提示以简体中文维护。最终 Artifact 为一份按机型分目录的 `firmware` 与一份统一 `apk-packages`（内含带源码短 hash 的各平台 ZIP）。
+所有 workflow 注释、README 和脚本提示以简体中文维护。最终 Artifacts 包括各 CORE 上传的 `<构建名>-firmware` 单设备包，以及可选的一份 `apk-packages` 汇总 Artifact（内含带源码短 hash 的各平台 ZIP）。
 
 ## 本地验证
 

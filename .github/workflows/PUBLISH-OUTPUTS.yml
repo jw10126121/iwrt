@@ -14,7 +14,7 @@ on:
         required: false
         type: boolean
         default: false
-      WRT_UPLOAD_ARTIFACTS:
+      WRT_UPLOAD_PACKAGES_ARTIFACT:
         required: false
         type: boolean
         default: true
@@ -39,11 +39,11 @@ jobs:
       - name: 检出项目
         uses: actions/checkout@v6
 
-      # 软件源和固件分别汇总：internal 只含 APK/feed，固件复用单设备可用 ZIP。
+      # 每个 CORE 的 feed 中间产物只供本次发布任务汇总；固件 ZIP 单独供 Release 使用。
       - name: 下载本工作流的全部软件源中间产物
         uses: actions/download-artifact@v7
         with:
-          pattern: '*-internal-apk-output'
+          pattern: '*-feed'
           path: build-artifacts
           merge-multiple: false
 
@@ -80,20 +80,11 @@ jobs:
             --input merged-feed-packages/feed --output package-archives
 
       - name: 保存平台 APK 包 Artifact
-        if: inputs.WRT_UPLOAD_ARTIFACTS
+        if: inputs.WRT_UPLOAD_PACKAGES_ARTIFACT
         uses: actions/upload-artifact@v6.0.0
         with:
           name: apk-packages
           path: package-archives/
-          compression-level: 0
-          if-no-files-found: error
-
-      - name: 保存按设备型号整理的固件
-        if: inputs.WRT_UPLOAD_ARTIFACTS
-        uses: actions/upload-artifact@v6.0.0
-        with:
-          name: firmware
-          path: firmware/
           compression-level: 0
           if-no-files-found: error
 
