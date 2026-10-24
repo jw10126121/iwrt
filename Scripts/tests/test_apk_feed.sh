@@ -97,7 +97,7 @@ test ! -e "$TMP_ROOT/public/manifest.json"
 
 kernel_id=$(cat "$OPENWRT_PATH/.apk-feed-kernel-id")
 
-# 超限 APK 不阻止收集；汇总时仅移出 CF 站点，完整归档仍保留。
+# 超限 APK 不阻止收集；汇总时从可发布 feed 与平台 ZIP 一并排除，并记录原因。
 python3 - "$OPENWRT_PATH/bin/packages/testarch/feed/demo-1.0-r1.apk" <<'PYTEST'
 import sys
 with open(sys.argv[1], "wb") as package:
@@ -111,7 +111,11 @@ python3 "$ROOT_DIR/Scripts/merge_apk_feeds.py" \
     --packages-output "$TMP_ROOT/all-packages" --archives-output "$TMP_ROOT/archives" \
     --expected-count 1
 test ! -e "$TMP_ROOT/small-public/immortalwrt/abc1234/packages/test/testsub/testarch/demo-1.0-r1.apk"
-test -f "$TMP_ROOT/all-packages/offline/immortalwrt/abc1234/packages/test/testsub/testarch/demo-1.0-r1.apk"
+test ! -e "$TMP_ROOT/all-packages/offline/immortalwrt/abc1234/packages/test/testsub/testarch/demo-1.0-r1.apk"
+grep -Fq 'demo-1.0-r1.apk' "$TMP_ROOT/small-public/excluded-packages.json"
+test ! -e "$TMP_ROOT/archives/immortalwrt-abc1234-test-testsub-testarch-packages.zip" || \
+  ! unzip -l "$TMP_ROOT/archives/immortalwrt-abc1234-test-testsub-testarch-packages.zip" | \
+  grep -q 'demo-1.0-r1.apk'
 test -f "$TMP_ROOT/small-public/immortalwrt/abc1234/kmods/test/testsub/$kernel_id/kmod-test-1.0.apk"
 test -f "$TMP_ROOT/archives/immortalwrt-abc1234-test-testsub-testarch-packages.zip"
 echo '【测试】APK 软件源依赖收集、平台归档、固件配置与单包过滤通过'

@@ -77,6 +77,21 @@ def add_tree(archive, root, prefix, exclude=()):
             archive.write(path, (Path(prefix) / path.relative_to(root)).as_posix())
 
 
+def extract_firmware_zip(archive_path, destination):
+    destination.mkdir(parents=True)
+    root = destination.resolve()
+    with zipfile.ZipFile(archive_path) as archive:
+        for member in archive.infolist():
+            path = (destination / member.filename).resolve()
+            require(path == root or root in path.parents, f"固件 ZIP 含有非法路径：{member.filename}")
+            if member.is_dir():
+                path.mkdir(parents=True, exist_ok=True)
+                continue
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(member) as source, path.open("wb") as output:
+                shutil.copyfileobj(source, output)
+
+
 def ready(args):
     artifact = args.input
     meta = json.loads((artifact / "build.json").read_text())
@@ -88,13 +103,10 @@ def ready(args):
     feed_meta = json.loads(feed_manifest.read_text())
     tag = f"build-{meta['GITHUB_RUN_ID']}-{meta['GITHUB_RUN_ATTEMPT']}"
     require(feed_meta.get("deployment_tag") == tag, "软件源不属于本次运行")
-    for directory in (args.firmware_output, args.packages_output):
-        require(not directory.exists(), f"输出目录已存在，拒绝覆盖：{directory}")
+    require(not args.firmware_output.exists(), f"输出目录已存在，拒绝覆盖：{args.firmware_output}")
     args.firmware_output.mkdir(parents=True)
-    args.packages_output.mkdir(parents=True)
     prefix = meta["OUTPUT_NAME_PREFIX"]
     firmware_zip = args.firmware_output / f"{prefix}-firmware.zip"
-    packages_zip = args.packages_output / f"{prefix}-apk-packages.zip"
     with tempfile.TemporaryDirectory(prefix="iwrt-ready-") as temporary:
         build = Path(temporary) / prefix
         prepare_firmware(artifact, meta, build)
@@ -102,17 +114,7 @@ def ready(args):
         require(upload.is_dir() and any(upload.iterdir()), f"未生成可用固件：{prefix}")
         with zipfile.ZipFile(firmware_zip, "w", compression=zipfile.ZIP_STORED) as archive:
             add_tree(archive, upload, "")
-        with zipfile.ZipFile(packages_zip, "w", compression=zipfile.ZIP_STORED) as archive:
-            add_tree(archive, feed, "feed", exclude=("offline", "tools"))
-            offline = feed / "offline"
-            if offline.is_dir():
-                add_tree(archive, offline, "offline")
-            archive.writestr("说明.txt",
-                             "单设备 APK 包归档\n\n"
-                             "feed/：该设备选中的插件、递归依赖、内核包及软件源索引。\n"
-                             "offline/：该设备其余内置包及依赖，仅供离线下载。\n"
-                             "软件源目录保留源码、平台、架构及内核 ABI 层级。\n")
-    print(f"【产物】单设备可用包已整理：{firmware_zip.name}、{packages_zip.name}")
+    print(f"【产物】单固件信息包已整理：{firmware_zip.name}")
 
 
 def organize(args):
@@ -129,28 +131,32 @@ def organize(args):
         require(prefix not in prefixes, f"构建标识重复：{prefix}")
         prefixes.add(prefix)
         artifact = manifest.parent
-        require((artifact / "firmware.tar").is_file(), f"缺少固件原始产物：{prefix}")
         feed_manifest = artifact / "feed/manifest.json"
         require(feed_manifest.is_file(), f"缺少软件源产物：{prefix}")
         feed_meta = json.loads(feed_manifest.read_text())
         tag = f"build-{meta['GITHUB_RUN_ID']}-{meta['GITHUB_RUN_ATTEMPT']}"
         require(feed_meta["deployment_tag"] == tag, f"软件源不属于本次运行：{prefix}")
-        entries.append((artifact, meta))
+        firmware_artifact = args.firmware_input / f"{prefix}-firmware"
+        firmware_zip = firmware_artifact / f"{prefix}-firmware.zip"
+        require(firmware_zip.is_file(), f"缺少单设备固件包：{prefix}")
+        entries.append((artifact, firmware_artifact, meta))
     for directory in (args.output, args.work, args.feeds_output):
         require(not directory.exists(), f"输出目录已存在，拒绝覆盖：{directory}")
     args.output.mkdir(parents=True)
     args.work.mkdir(parents=True)
     args.feeds_output.mkdir(parents=True)
-    for artifact, meta in entries:
+    for artifact, firmware_artifact, meta in entries:
         prefix = meta["OUTPUT_NAME_PREFIX"]
-        build = (args.work / prefix).resolve()
-        prepare_firmware(artifact, meta, build)
         destination = args.output / meta["WRT_DEVICE"] / prefix
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(build / "upload"), destination)
+        extract_firmware_zip(firmware_artifact / f"{prefix}-firmware.zip", destination)
+        work = args.work / prefix
+        work.mkdir()
+        readmes = sorted(destination.glob(f"readme_{prefix}.txt"))
+        require(readmes, f"固件包缺少说明文件：{prefix}")
+        shutil.copy2(readmes[0], work / "readme_release.txt")
         shutil.move(str(artifact / "feed"), args.feeds_output / prefix)
         print(f"【固件】已按型号整理：{destination}")
-    (args.work / "builds.json").write_text(json.dumps([meta for _, meta in entries], ensure_ascii=False, indent=2))
+    (args.work / "builds.json").write_text(json.dumps([meta for _, _, meta in entries], ensure_ascii=False, indent=2))
 
 
 def release(args):
@@ -171,6 +177,26 @@ def release(args):
                             "--notes-file", notes], check=True)
 
 
+def release_packages(args):
+    entries = json.loads((args.work / "builds.json").read_text())
+    require(entries, "没有构建元数据，无法发布平台插件包")
+    first = entries[0]
+    tag = f"apk-packages-build-{first['GITHUB_RUN_ID']}-{first['GITHUB_RUN_ATTEMPT']}"
+    files = [str(path.resolve()) for path in sorted(args.packages_input.glob("*.zip"))]
+    require(files, f"未找到整理后的平台插件包：{args.packages_input}")
+    notes = args.work / "apk-packages-release-notes.txt"
+    notes.write_text("本次 CUSTOM 工作流按平台整理的 APK feed 包归档。\n"
+                     "各 ZIP 只含可发布 feed 插件、依赖、内核包和索引，不含 offline 包。\n")
+    exists = subprocess.run(["gh", "release", "view", tag], capture_output=True).returncode == 0
+    if exists:
+        subprocess.run(["gh", "release", "edit", tag, "--title", tag,
+                        "--notes-file", str(notes)], check=True)
+        subprocess.run(["gh", "release", "upload", tag, *files, "--clobber"], check=True)
+    else:
+        subprocess.run(["gh", "release", "create", tag, *files, "--title", tag,
+                        "--notes-file", str(notes)], check=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -179,17 +205,21 @@ def main():
     ready_parser = commands.add_parser("ready")
     ready_parser.add_argument("--input", type=Path, required=True)
     ready_parser.add_argument("--firmware-output", type=Path, required=True)
-    ready_parser.add_argument("--packages-output", type=Path, required=True)
     organizer = commands.add_parser("organize")
     organizer.add_argument("--input", type=Path, required=True)
+    organizer.add_argument("--firmware-input", type=Path, required=True)
     organizer.add_argument("--expected-count", type=int, required=True)
     organizer.add_argument("--feeds-output", type=Path, required=True)
-    for command in (organizer, commands.add_parser("release")):
+    releaser = commands.add_parser("release")
+    package_releaser = commands.add_parser("release-packages")
+    package_releaser.add_argument("--packages-input", type=Path, required=True)
+    for command in (organizer, releaser, package_releaser):
         command.add_argument("--output", type=Path, required=True)
         command.add_argument("--work", type=Path, required=True)
     args = parser.parse_args()
     try:
-        {"export": export, "ready": ready, "organize": organize, "release": release}[args.command](args)
+        {"export": export, "ready": ready, "organize": organize,
+         "release": release, "release-packages": release_packages}[args.command](args)
     except (ValueError, KeyError, OSError, tarfile.TarError, subprocess.CalledProcessError) as error:
         print(f"【产物】处理失败：{error}", file=sys.stderr)
         return 1

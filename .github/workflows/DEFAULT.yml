@@ -61,6 +61,10 @@ on:
         required: false
         type: boolean
         default: true
+      WRT_RELEASE_PACKAGES:
+        required: false
+        type: boolean
+        default: false
       WHAT_MY_SAY:
         required: false
         type: string
@@ -182,6 +186,11 @@ on:
         required: false
         type: boolean
         default: false
+      WRT_RELEASE_PACKAGES:
+        description: '是否将按平台整理的 APK feed 包发布到独立 Release'
+        required: false
+        type: boolean
+        default: false
       WHAT_MY_SAY:
         description: '编译说明'
         required: false
@@ -291,5 +300,6 @@ jobs:
     with:
       WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_RELEASE_FIRMWARE: ${{ inputs.WRT_RELEASE_FIRMWARE }}
+      WRT_RELEASE_PACKAGES: ${{ inputs.WRT_RELEASE_PACKAGES }}
       WRT_EXPECTED_BUILDS: 1
     secrets: inherit

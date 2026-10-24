@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         default: false
+      WRT_RELEASE_PACKAGES:
+        description: '是否将按平台整理的 APK feed 包发布到独立 Release'
+        required: false
+        type: boolean
+        default: false
       SOURCE_TYPE:
         description: '源码类型（非 IPQ 设备自动使用官方 ImmortalWrt）'
         required: false
@@ -30,7 +35,7 @@ on:
         description: '源码 HASH，留空使用所选源码分支的最新提交'
         required: false
         type: string
-        default: ''
+        default: 'e695009c15c623f4f6a83376b505faaf7a4ae5b5'
       WRT_FEED_HOST:
         description: 'APK 软件源主机域名'
         required: false
@@ -61,29 +66,30 @@ jobs:
   #     WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
   #   secrets: inherit
 
-  cmiot_ax18_nowifi_fw4_frps:
-    name: cmiot-ax18-nowifi-fw4-frps
-    uses: ./.github/workflows/CORE-ALL.yml
-    with:
-      WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
-      WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
-      WRT_DEVICE: cmiot-ax18-nowifi
-      SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
-      WRT_PACKAGE_MANAGER: apk
-      WRT_FIREWALL: fw4
-      WRT_OVERLAYS: frps
-      WRT_DIY_SETTING: diy_config.sh
-      WRT_DIYPackages: Packages.sh
-      WRT_DIY_FEEDS: diy_feeds.sh
-      WRT_DEFAULT_LANIP: 192.168.0.1
-      WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
-    secrets: inherit
+  # cmiot_ax18_nowifi_fw4_frps:
+  #   name: cmiot-ax18-nowifi-fw4-frps
+  #   uses: ./.github/workflows/CORE-ALL.yml
+  #   with:
+  #     WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+  #     WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
+  #     WRT_DEVICE: cmiot-ax18-nowifi
+  #     SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
+  #     WRT_PACKAGE_MANAGER: apk
+  #     WRT_FIREWALL: fw4
+  #     WRT_OVERLAYS: frps
+  #     WRT_DIY_SETTING: diy_config.sh
+  #     WRT_DIYPackages: Packages.sh
+  #     WRT_DIY_FEEDS: diy_feeds.sh
+  #     WRT_DEFAULT_LANIP: 192.168.0.1
+  #     WRT_MINE_SAY: ${{ inputs.WHAT_MY_SAY }}
+  #   secrets: inherit
 
   gl_mt6000_nowifi_fw4:
     name: gl-mt6000-nowifi-fw4-base
     uses: ./.github/workflows/CORE-ALL.yml
     with:
-      WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
+      WRT_SOURCE_HASH_INFO: 'e695009c15c623f4f6a83376b505faaf7a4ae5b5'
+      # WRT_SOURCE_HASH_INFO: ${{ inputs.WRT_SOURCE_HASH_INFO }}
       WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_DEVICE: gl-mt6000-nowifi
       SOURCE_TYPE: ${{ inputs.SOURCE_TYPE }}
@@ -136,12 +142,13 @@ jobs:
   publish_outputs:
     name: 整理并发布本工作流的固件和软件源
     needs:
-      - cmiot_ax18_nowifi_fw4_frps
+      # - cmiot_ax18_nowifi_fw4_frps
       - gl_mt6000_nowifi_fw4
       - jd_ax6600_wifi_fw4
     uses: ./.github/workflows/PUBLISH-OUTPUTS.yml
     with:
       WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_RELEASE_FIRMWARE: ${{ inputs.WRT_RELEASE_FIRMWARE }}
-      WRT_EXPECTED_BUILDS: 3
+      WRT_RELEASE_PACKAGES: ${{ inputs.WRT_RELEASE_PACKAGES }}
+      WRT_EXPECTED_BUILDS: 2
     secrets: inherit

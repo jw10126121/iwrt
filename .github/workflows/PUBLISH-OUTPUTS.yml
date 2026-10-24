@@ -10,6 +10,10 @@ on:
       WRT_RELEASE_FIRMWARE:
         required: true
         type: boolean
+      WRT_RELEASE_PACKAGES:
+        required: false
+        type: boolean
+        default: false
       WRT_EXPECTED_BUILDS:
         required: true
         type: number
@@ -31,12 +35,19 @@ jobs:
       - name: 检出项目
         uses: actions/checkout@v6
 
-      # 只下载标记为 internal 的原始中间产物；单设备可用 ZIP 不参与汇总。
-      - name: 下载本工作流的全部原始产物
+      # 软件源和固件分别汇总：internal 只含 APK/feed，固件复用单设备可用 ZIP。
+      - name: 下载本工作流的全部软件源中间产物
         uses: actions/download-artifact@v7
         with:
-          pattern: '*-internal-build-output'
+          pattern: '*-internal-apk-output'
           path: build-artifacts
+          merge-multiple: false
+
+      - name: 下载单设备固件包
+        uses: actions/download-artifact@v7
+        with:
+          pattern: '*-firmware'
+          path: firmware-artifacts
           merge-multiple: false
 
       - name: 校验产物并按设备型号整理固件
@@ -44,7 +55,8 @@ jobs:
           EXPECTED_BUILDS: ${{ inputs.WRT_EXPECTED_BUILDS }}
         run: |
           python3 Scripts/ci_build_outputs.py organize \
-            --input build-artifacts --output firmware --work firmware-work \
+            --input build-artifacts --firmware-input firmware-artifacts \
+            --output firmware --work firmware-work \
             --feeds-output feed-artifacts --expected-count "$EXPECTED_BUILDS"
 
       - name: 按平台汇总插件并重建软件源索引
@@ -105,3 +117,11 @@ jobs:
         run: |
           python3 Scripts/ci_build_outputs.py release \
             --output firmware --work firmware-work
+
+      - name: 发布按平台整理的 APK feed Release
+        if: inputs.WRT_RELEASE_PACKAGES
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 Scripts/ci_build_outputs.py release-packages \
+            --output firmware --work firmware-work --packages-input package-archives

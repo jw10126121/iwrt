@@ -104,6 +104,30 @@ class MergeFeedsTest(unittest.TestCase):
         self.assertEqual(archived_index.read_text(), index.read_text())
         self.assertFalse((self.output / "manifest.json").exists())
 
+    def test_different_plugin_versions_are_both_in_feed_and_platform_archive(self):
+        first = self.artifact("one", packages=("demo-1.0.apk",))
+        second = self.artifact("two", packages=("demo-2.0.apk",))
+        (second / "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/demo-2.0.apk").write_text("demo 2.0")
+        result = self.merge(2)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        directory = self.output / "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53"
+        self.assertEqual((directory / "packages.adb").read_text().splitlines(),
+                         ["demo-1.0.apk", "demo-2.0.apk"])
+        with zipfile.ZipFile(next((self.root / "archives").glob("*.zip"))) as archive:
+            names = archive.namelist()
+            self.assertIn("feed/libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/demo-1.0.apk", names)
+            self.assertIn("feed/libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/demo-2.0.apk", names)
+
+    def test_same_filename_different_content_keeps_one_deterministically(self):
+        first = self.artifact("one")
+        second = self.artifact("two")
+        relative = "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/demo-1.0.apk"
+        (first / relative).write_text("first artifact")
+        (second / relative).write_text("second artifact")
+        result = self.merge(2)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.output / relative).read_text(), "first artifact")
+
     def test_offline_packages_are_preserved_and_deduplicated_without_deploying_them(self):
         for name in ("one", "two"):
             artifact = self.artifact(name)
@@ -112,9 +136,29 @@ class MergeFeedsTest(unittest.TestCase):
             (offline / "builtin-1.0.apk").write_text("内置包与依赖")
         result = self.merge(2)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual([path.name for path in self.packages_output.rglob("builtin-1.0.apk")],
-                         ["builtin-1.0.apk"])
+        self.assertFalse(list(self.packages_output.glob("offline/**/*.apk")))
         self.assertEqual(list(self.output.rglob("builtin-1.0.apk")), [])
+
+    def test_offline_variants_are_not_in_final_platform_package_archive(self):
+        first = self.artifact("ax18")
+        second = self.artifact("ax6600")
+        relative = Path("libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/builtin-1.0.apk")
+        for artifact, content in ((first, b"AX18 built-in package"), (second, b"AX6600 built-in package")):
+            offline = artifact / "offline" / relative.parent
+            offline.mkdir(parents=True)
+            (offline / relative.name).write_bytes(content)
+        result = self.merge(2)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(list(self.output.rglob("builtin-1.0.apk")), [])
+        self.assertFalse(list(self.packages_output.glob("offline/**/*.apk")))
+        archives = list((self.root / "archives").glob("*.zip"))
+        archived_files = {}
+        for path in archives:
+            with zipfile.ZipFile(path) as archive:
+                for name in archive.namelist():
+                    if name.endswith("builtin-1.0.apk"):
+                        archived_files[name] = archive.read(name)
+        self.assertEqual(archived_files, {})
 
     def test_offline_package_already_in_another_devices_feed_is_stored_once(self):
         first = self.artifact("one", packages=("builtin-1.0.apk",))
@@ -125,7 +169,19 @@ class MergeFeedsTest(unittest.TestCase):
             (first / "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/builtin-1.0.apk").read_bytes())
         result = self.merge(2)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(list(self.packages_output.rglob("builtin-1.0.apk"))), 1)
+        self.assertEqual(len(list((self.packages_output / "feed").rglob("builtin-1.0.apk"))), 1)
+
+    def test_offline_package_is_not_added_even_when_feed_has_same_name(self):
+        first = self.artifact("one", packages=("builtin-1.0.apk",))
+        second = self.artifact("two", packages=())
+        relative = Path("libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/builtin-1.0.apk")
+        offline = second / "offline" / relative.parent
+        offline.mkdir(parents=True)
+        (offline / relative.name).write_text("设备专用离线版本")
+        result = self.merge(2)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.output / relative).read_text(), "builtin-1.0.apk")
+        self.assertEqual(len(list((self.packages_output / "feed").rglob("builtin-1.0.apk"))), 1)
 
     def test_empty_feed_host_still_creates_one_package_archive(self):
         artifact = self.artifact("one")
@@ -153,7 +209,7 @@ class MergeFeedsTest(unittest.TestCase):
             self.assertIn("feed/" + relative, archive.namelist())
             self.assertFalse(any("ipq60xx" in name for name in archive.namelist()))
 
-    def test_limit_and_larger_packages_only_skip_cf_and_stay_in_archive(self):
+    def test_limit_and_larger_packages_are_excluded_from_feed_and_archive(self):
         artifact = self.artifact("one", packages=("demo-1.0.apk", "boundary-1.0.apk", "large-1.0.apk"))
         directory = artifact / "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53"
         for name, size in (("boundary", 25 * 1024 * 1024), ("large", 25 * 1024 * 1024 + 1)):
@@ -168,17 +224,27 @@ class MergeFeedsTest(unittest.TestCase):
         self.assertEqual(len(report), 2)
         with zipfile.ZipFile(next((self.root / "archives").glob("*.zip"))) as archive:
             names = archive.namelist()
-            self.assertEqual(sum(name.endswith("boundary-1.0.apk") for name in names), 1)
-            self.assertEqual(sum(name.endswith("large-1.0.apk") for name in names), 1)
-            self.assertTrue(any(name.startswith("offline/") and name.endswith("large-1.0.apk") for name in names))
+            self.assertFalse(any(name.endswith(("boundary-1.0.apk", "large-1.0.apk")) for name in names))
 
-    def test_same_filename_with_different_content_is_rejected(self):
-        self.artifact("one")
+    def test_final_platform_archive_contains_only_feed_packages(self):
+        artifact = self.artifact("one")
+        offline = artifact / "offline/libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53"
+        offline.mkdir(parents=True)
+        (offline / "builtin-1.0.apk").write_text("offline only")
+        result = self.merge(1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(next((self.root / "archives").glob("*.zip"))) as archive:
+            self.assertFalse(any(name.startswith("offline/") or "/offline/" in name for name in archive.namelist()))
+            self.assertFalse(any(name.endswith("builtin-1.0.apk") for name in archive.namelist()))
+
+    def test_same_filename_with_different_content_uses_deterministic_first_copy(self):
+        first = self.artifact("one")
         second = self.artifact("two")
         (second / "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/demo-1.0.apk").write_text("冲突内容")
         result = self.merge(2)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("软件包内容冲突", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.output / "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/demo-1.0.apk").read_text(),
+                         "demo-1.0.apk")
 
     def test_identical_package_signed_by_different_builds_is_deduplicated(self):
         first = self.artifact("one")
@@ -192,7 +258,7 @@ class MergeFeedsTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((self.output / relative).is_file())
 
-    def test_corrupted_payload_with_identical_metadata_is_rejected(self):
+    def test_same_version_with_different_payload_keeps_deterministic_first_copy(self):
         first = self.artifact("one")
         second = self.artifact("two")
         relative = "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/demo-1.0.apk"
@@ -200,18 +266,18 @@ class MergeFeedsTest(unittest.TestCase):
         (first / relative).write_text(json.dumps({"metadata": metadata}))
         (second / relative).write_text(json.dumps({"metadata": metadata, "valid": False}))
         result = self.merge(2)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("软件包内容冲突", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.output / relative).read_text(), (first / relative).read_text())
 
-    def test_real_payload_metadata_difference_is_rejected(self):
+    def test_same_version_metadata_difference_keeps_deterministic_first_copy(self):
         first = self.artifact("one")
         second = self.artifact("two")
         relative = "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/demo-1.0.apk"
         (first / relative).write_text(json.dumps({"metadata": {"paths": [{"hash": "one"}]}}))
         (second / relative).write_text(json.dumps({"metadata": {"paths": [{"hash": "two"}]}}))
         result = self.merge(2)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("软件包内容冲突", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.output / relative).read_text(), (first / relative).read_text())
 
     def test_empty_userspace_still_has_a_valid_repository_index(self):
         self.artifact("one", packages=())

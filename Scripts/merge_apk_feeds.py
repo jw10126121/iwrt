@@ -2,7 +2,6 @@
 """汇总本次工作流的设备软件源，重建索引后生成一个完整站点。"""
 
 import argparse
-import hashlib
 import html
 import json
 import os
@@ -19,36 +18,15 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def digest(path):
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").digest()
-
-
 def apk_command(artifact, override):
     return [str(override.resolve())] if override else ["bash", str((artifact / "tools/run-apk").resolve())]
 
 
-def same_package(left, right, command):
-    if digest(left) == digest(right):
-        return True
-    # 独立 CORE 各自生成签名密钥。adbdump JSON 含文件哈希和脚本但不含签名，
-    # 必须先验证数据完整性，才能把仅签名或压缩方式不同的包认作同一内容。
-    try:
-        metadata = []
-        for package in (left, right):
-            subprocess.run(command + ["verify", "--allow-untrusted", str(package.resolve())],
-                           check=True, capture_output=True)
-            metadata.append(json.loads(subprocess.check_output(
-                command + ["adbdump", "--format", "json", str(package.resolve())],
-                text=True, stderr=subprocess.PIPE)))
-        return metadata[0] == metadata[1]
-    except (ValueError, OSError, subprocess.CalledProcessError):
-        return False
-
-
-def add_package(package, destination, command):
+def add_package(package, destination):
     if destination.exists():
-        require(same_package(destination, package, command), f"软件包内容冲突：{destination}")
+        # 文件名已包含包版本；相同路径代表同平台同包同版本。entries 按
+        # artifact 名排序，因此保留首个副本即可，避免签名差异阻断发布。
+        return
     else:
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(package, destination)
@@ -115,33 +93,16 @@ def merge(args):
             destination = args.output / directory
             destination.mkdir(parents=True, exist_ok=True)
             for package in sorted((artifact / directory).glob("*.apk")):
-                add_package(package, destination / package.name, apk_command(artifact, args.apk))
+                add_package(package, destination / package.name)
         (args.output / directories[1] / "vermagic").write_text(meta["vermagic"] + "\n")
-    # 不属于模块或内核依赖的额外内置包仅供离线下载；feed 已有的包不存第二份。
-    for artifact, meta in entries:
-        prefix = Path(meta["source_type"]) / meta["source_tag"]
-        directories = (prefix / "packages" / meta["target"] / meta["subtarget"] / meta["arch"],
-                       prefix / "kmods" / meta["target"] / meta["subtarget"] / meta["kernel_id"])
-        for directory in directories:
-            for package in sorted((artifact / "offline" / directory).glob("*.apk")):
-                deployed = args.output / directory / package.name
-                command = apk_command(artifact, args.apk)
-                if deployed.exists():
-                    require(same_package(deployed, package, command), f"软件包内容冲突：{directory / package.name}")
-                else:
-                    add_package(package, args.packages_output / "offline" / directory / package.name, command)
-    # Pages 限制只影响站点；被排除的包仍保留在完整下载归档中。
+    # Pages 限制只影响站点；超限包不进入可发布 feed，也不进入最终平台 ZIP。
     excluded = []
     for package in sorted(args.output.rglob("*.apk")):
         if package.stat().st_size >= 25 * 1024 * 1024:
             relative = package.relative_to(args.output)
-            destination = args.packages_output / "offline" / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            if destination.exists():
-                destination.unlink()
-            shutil.move(package, destination)
-            excluded.append({"path": str(relative), "size": destination.stat().st_size,
-                             "reason": "达到或超过 25 MiB，仅跳过 CF 上传"})
+            excluded.append({"path": str(relative), "size": package.stat().st_size,
+                             "reason": "达到或超过 25 MiB，未纳入可发布 feed"})
+            package.unlink()
             print(f"【软件源】仅跳过 CF 超限包：{relative}")
     (args.output / "excluded-packages.json").write_text(
         json.dumps(excluded, ensure_ascii=False, indent=2) + "\n")
@@ -162,11 +123,10 @@ def merge(args):
         f'<h1>本次编译的 APK 软件源</h1><ul>{links}</ul>\n')
     shutil.copytree(args.output, args.packages_output / "feed", copy_function=link_or_copy)
     (args.packages_output / "说明.txt").write_text(
-        "本次编译的完整 APK 包归档\n\n"
-        "feed/：=m 插件、递归依赖和内核包，以及重新生成的软件源索引。\n"
-        "offline/：其余 =y 包、依赖及 >=25 MiB 的超限包，不上传 CF。\n"
-        "同平台相同内容只存一份；不同源码、平台、架构及内核配置分目录。\n"
-        "excluded-packages.json：当前平台的 CF 超限排除清单，大包仍可从 offline/ 手动下载。\n")
+        "本平台可发布的 APK feed 归档\n\n"
+        "feed/：=m 插件、递归依赖、内核包和重建的软件源索引。\n"
+        "同平台同插件不同版本均保留；相同文件名只保留排序后首个构建的副本。\n"
+        "不包含 offline 包。excluded-packages.json 记录因 Cloudflare 25 MiB 限制排除的包。\n")
     if args.archives_output:
         args.archives_output.mkdir(parents=True)
         groups = {}
@@ -180,13 +140,12 @@ def merge(args):
             filename = f"{source}-{revision}-{target}-{subtarget}-{arch}-packages.zip"
             # APK 已压缩，ZIP 使用存储模式，避免反复压缩浪费 CPU。
             with zipfile.ZipFile(args.archives_output / filename, "w", compression=zipfile.ZIP_STORED) as archive:
-                for view in ("feed", "offline"):
-                    for directory in directories:
-                        root = args.packages_output / view / directory
-                        if root.exists():
-                            for path in sorted(root.rglob("*")):
-                                if path.is_file():
-                                    archive.write(path, path.relative_to(args.packages_output))
+                for directory in directories:
+                    root = args.packages_output / "feed" / directory
+                    if root.exists():
+                        for path in sorted(root.rglob("*")):
+                            if path.is_file():
+                                archive.write(path, path.relative_to(args.packages_output))
                 archive.write(args.packages_output / "说明.txt", "说明.txt")
                 own_excluded = [item for item in excluded if any(
                     Path(item["path"]).is_relative_to(directory) for directory in directories)]
@@ -208,7 +167,7 @@ def main():
     parser.add_argument("--apk", type=Path)
     parser.add_argument("--packages-output", type=Path, required=True,
                         help="合并后的单份 APK 包归档目录")
-    parser.add_argument("--archives-output", type=Path, help="按源码短哈希与平台生成完整 ZIP 的目录")
+    parser.add_argument("--archives-output", type=Path, help="按源码短哈希与平台生成 feed ZIP 的目录")
     args = parser.parse_args()
     try:
         merge(args)

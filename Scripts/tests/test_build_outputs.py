@@ -62,7 +62,33 @@ class BuildOutputsTest(unittest.TestCase):
         return output
 
     def organize(self, count=1):
+        firmware_input = self.root / "firmware-artifacts"
+        firmware_input.mkdir(exist_ok=True)
+        for artifact in self.inputs.iterdir():
+            if not artifact.is_dir() or not (artifact / "build.json").is_file():
+                continue
+            prefix = json.loads((artifact / "build.json").read_text())["OUTPUT_NAME_PREFIX"]
+            destination = firmware_input / (prefix + "-firmware")
+            if (destination / f"{prefix}-firmware.zip").is_file():
+                continue
+            ready = self.root / (prefix + "-ready")
+            result = self.run_script("ready", "--input", artifact,
+                                     "--firmware-output", ready / "firmware")
+            if result.returncode:
+                return result
+            destination.mkdir()
+            (ready / "firmware" / f"{prefix}-firmware.zip").replace(destination / f"{prefix}-firmware.zip")
+            (artifact / "firmware.tar").unlink()
         return self.run_script("organize", "--input", self.inputs,
+                               "--firmware-input", firmware_input,
+                               "--output", self.root / "firmware",
+                               "--work", self.root / "work",
+                               "--feeds-output", self.root / "feeds",
+                               "--expected-count", count)
+
+    def organize_existing(self, count=1):
+        return self.run_script("organize", "--input", self.inputs,
+                               "--firmware-input", self.root / "firmware-artifacts",
                                "--output", self.root / "firmware",
                                "--work", self.root / "work",
                                "--feeds-output", self.root / "feeds",
@@ -82,28 +108,33 @@ class BuildOutputsTest(unittest.TestCase):
             self.assertFalse(any(name.endswith(".apk") for name in names))
         self.assertFalse((self.root / "test-build/upload").exists())
 
-    def test_ready_export_creates_separate_device_firmware_and_package_archives(self):
+    def test_internal_apk_artifact_needs_no_firmware_tar(self):
+        artifact = self.export()
+        ready = self.root / "ready"
+        result = self.run_script("ready", "--input", artifact,
+                                 "--firmware-output", ready / "firmware")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        firmware_input = self.root / "firmware-artifacts/test-build-firmware"
+        firmware_input.mkdir(parents=True)
+        (ready / "firmware/test-build-firmware.zip").replace(firmware_input / "test-build-firmware.zip")
+        (artifact / "firmware.tar").unlink()
+        self.assertTrue((self.inputs / "test-build/feed/manifest.json").is_file())
+        result = self.organize_existing()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_ready_export_creates_single_firmware_information_archive(self):
         artifact = self.export()
         result = self.run_script("ready", "--input", artifact,
-                                 "--firmware-output", self.root / "ready/firmware",
-                                 "--packages-output", self.root / "ready/apk-packages")
+                                 "--firmware-output", self.root / "ready/firmware")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         firmware_zip = self.root / "ready/firmware/test-build-firmware.zip"
-        packages_zip = self.root / "ready/apk-packages/test-build-apk-packages.zip"
         self.assertTrue(firmware_zip.is_file())
-        self.assertTrue(packages_zip.is_file())
         with zipfile.ZipFile(firmware_zip) as archive:
             names = archive.namelist()
             self.assertTrue(any(name.endswith("_squashfs-sysupgrade.bin") for name in names))
             self.assertTrue(any(name.startswith("readme_test-build") for name in names))
             self.assertTrue(any(name.startswith("config_test-build") for name in names))
             self.assertFalse(any(name.endswith(".apk") for name in names))
-        with zipfile.ZipFile(packages_zip) as archive:
-            names = archive.namelist()
-            self.assertIn("feed/immortalwrt/abc1234/packages/test/testsub/testarch/demo.apk", names)
-            self.assertIn("feed/immortalwrt/abc1234/packages/test/testsub/testarch/packages.adb", names)
-            self.assertIn("offline/immortalwrt/abc1234/packages/test/testsub/testarch/builtin.apk", names)
-            self.assertFalse(any(name.startswith("tools/") for name in names))
 
     def test_single_device_is_organized_and_versions_are_supplemented_in_publisher(self):
         self.export()
@@ -156,12 +187,12 @@ class BuildOutputsTest(unittest.TestCase):
         self.assertFalse((self.root / "outside").exists())
 
     def test_unsafe_archive_is_rejected(self):
-        artifact = self.export()
-        with tarfile.open(artifact / "firmware.tar", "w") as archive:
-            info = tarfile.TarInfo("../../escaped")
-            info.size = 1
-            archive.addfile(info, io.BytesIO(b"x"))
-        result = self.organize()
+        self.export()
+        self.organize()
+        archive_path = self.root / "firmware-artifacts/test-build-firmware/test-build-firmware.zip"
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr("../../escaped", "x")
+        result = self.organize_existing()
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / "escaped").exists())
 
@@ -185,6 +216,30 @@ class BuildOutputsTest(unittest.TestCase):
         self.assertEqual(commands[-1][2], "test-build")
         self.assertTrue(any(item.endswith("test-build_squashfs-sysupgrade.bin") for item in commands[-1]))
         self.assertFalse(any("Packages" in item or item.endswith(".apk") for item in commands[-1]))
+
+    def test_platform_packages_can_be_published_to_a_separate_release(self):
+        self.export()
+        result = self.organize()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        packages = self.root / "package-archives"
+        packages.mkdir()
+        (packages / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-packages.zip").write_text("feed zip")
+        executable = self.root / "tools"
+        executable.mkdir()
+        gh = executable / "gh"
+        gh.write_text("#!/usr/bin/env python3\nimport json, os, sys\n"
+                      "with open(os.environ['GH_LOG'], 'a') as log: log.write(json.dumps(sys.argv[1:]) + '\\n')\n")
+        gh.chmod(0o755)
+        env = dict(self.environment, PATH=str(executable) + os.pathsep + os.environ["PATH"],
+                   GH_LOG=str(self.root / "gh-packages.log"))
+        result = self.run_script("release-packages", "--output", self.root / "firmware",
+                                 "--work", self.root / "work", "--packages-input", packages,
+                                 environment=env)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        commands = [json.loads(line) for line in (self.root / "gh-packages.log").read_text().splitlines()]
+        self.assertEqual([command[1] for command in commands], ["view", "edit", "upload"])
+        self.assertEqual(commands[-1][2], "apk-packages-build-123-1")
+        self.assertTrue(any(item.endswith("-packages.zip") for item in commands[-1]))
 
 
 if __name__ == "__main__":

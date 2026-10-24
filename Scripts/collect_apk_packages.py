@@ -109,7 +109,7 @@ def collect(args):
         destination = args.kmods if package["name"].startswith("kmod-") or package["name"] == "kernel" else args.userspace
         if index not in selected:
             destination = args.output / "offline" / destination.relative_to(args.output)
-        add_package(path, destination / path.name, [args.apk])
+        add_package(path, destination / path.name)
     print(f"【软件源】已收集 APK：feed {len(selected)} 个（含依赖与内核包），其他 {len(records) - len(selected)} 个")
 
 
