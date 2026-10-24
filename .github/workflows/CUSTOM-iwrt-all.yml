@@ -35,7 +35,7 @@ on:
         description: '源码 HASH，留空使用所选源码分支的最新提交'
         required: false
         type: string
-        default: 'e695009c15c623f4f6a83376b505faaf7a4ae5b5'
+        default: ''
       WRT_FEED_HOST:
         description: 'APK 软件源主机域名'
         required: false
