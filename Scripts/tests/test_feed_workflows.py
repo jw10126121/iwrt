@@ -65,6 +65,7 @@ class FeedWorkflowTest(unittest.TestCase):
         self.assertIn("pages deploy public", deploys[0]["with"]["command"])
         uploads = [step for step in steps if "actions/upload-artifact@" in step.get("uses", "")]
         self.assertEqual({step["with"]["name"] for step in uploads}, {"apk-packages"})
+        self.assertEqual(uploads[0]["with"]["path"], "package-artifacts/")
         self.assertTrue(all(step["with"]["if-no-files-found"] == "error" for step in uploads))
         self.assertTrue(all(step["if"] == "inputs.WRT_UPLOAD_PACKAGES_ARTIFACT" for step in uploads))
         commands = "\n".join(step.get("run", "") for step in steps)
@@ -73,6 +74,8 @@ class FeedWorkflowTest(unittest.TestCase):
         self.assertIn("merge_apk_feeds.py", commands)
         self.assertIn("ci_organize_apk_packages.py", commands)
         self.assertIn("--input merged-feed-packages/feed --output package-archives", commands)
+        self.assertIn("--artifact-output package-artifacts", commands)
+        self.assertIn("--apk \"$APK_TOOL\"", commands)
         releases = [step for step in steps if "ci_build_outputs.py release \\" in step.get("run", "")]
         self.assertEqual(len(releases), 1)
         self.assertEqual(releases[0]["if"], "inputs.WRT_RELEASE_FIRMWARE")

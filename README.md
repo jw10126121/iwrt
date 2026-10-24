@@ -29,13 +29,17 @@ CUSTOM 和 DEFAULT 在全部编译任务成功后，统一调用一次 `PUBLISH-
 
 软件源自动收集每台设备最终 `.config` 中所有 `CONFIG_PACKAGE_*=m` 的包、递归依赖（即使依赖是 `=y`），以及本次实际编译生成的全部 `kmod-*` 包及其依赖。其他实际编译的内置包只留在短期内部中间产物中，不进入最终 `apk-packages` 或 Release。
 
-`apk-packages` 汇总 Artifact（由 `WRT_UPLOAD_PACKAGES_ARTIFACT` 控制）内部按「源码 + 源码短 hash + target/subtarget + 架构」保存平台 ZIP，例如 `libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-packages.zip`。同源同平台多个机型的插件包合并为一份，IPQ60xx 与 Filogic（MT6000）各有自己的归档。同平台同插件不同版本全部保留；同版本的重复文件名只留按构建 artifact 名排序后的首份。平台 ZIP 由 `ci_organize_apk_packages.py` 从合并后的 feed 包另行整理，面向下载保存，和 Pages 的 feed 目录分开。
+`apk-packages` 汇总 Artifact（由 `WRT_UPLOAD_PACKAGES_ARTIFACT` 控制）内部按「源码 + 源码短 hash + target/subtarget + 架构」分目录，例如 `libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-packages/`。每个平台目录直接包含 feed 包、`kmods/`、平台信息、排除包清单和说明，不包含嵌套的 `*-packages.zip`。下载 Artifact 并解压一层后，就能直接看到每个平台整理好的文件。同源同平台多个机型的插件包合并为一份，IPQ60xx 与 Filogic（MT6000）各有自己的目录。同平台同插件不同版本全部保留；同版本的重复文件名只留按构建 artifact 名排序后的首份。Artifact 文件由 `ci_organize_apk_packages.py` 从合并后的 feed 包另行整理，面向下载保存，和 Pages 的 feed 目录分开。
+
+这些手工插件目录只出现在 `apk-packages` Artifact 和 Release ZIP 中，不会写入 Pages 软件源。Pages feed 按源码、target/subtarget 和架构分别保留 APK 仓库目录，包文件与 `packages.adb` 索引位于同一层，供固件的软件源配置在线安装。
+
+下载归档还会参照 `Scripts/Organize_Packages.sh`，为每个 `luci-app-*` 和 `luci-theme-*` 建同名子目录。脚本读取 APK 控制信息并递归收集可分发的运行依赖，也会放入对应 `luci-i18n-*-zh-cn`（如果 feed 中有）。复制插件目录到路由器后，可用 `apk add /路径/luci-app-socat/*.apk` 一起安装用户态包。内核模块依赖放在插件目录的 `kmods/<kernel_id>/` 下；需选择与设备当前 `kernel_id`/vermagic 匹配的目录，将其中的 `.apk` 一并传给 `apk add`。固件内置依赖由系统提供，无需重复安装。
 
 下载 ZIP 内，用户态 APK 位于 `packages/<架构>/`，内核 APK 和 `vermagic` 位于 `kmods/<kernel_id>/`，另含 `平台信息.json`、`说明.txt`、`excluded-packages.json`。该 ZIP 不含软件源索引，不能作为设备 feed 直接使用；设备在线安装使用 Pages 发布目录。ZIP 同样不包含 `offline/` 包。
 
 Pages 项目由入口的 `WRT_FEED_HOST` 指定，默认是 `lin-iwrt.pages.dev`。即使同次编译同时包含 LibWrt/VIKINGYFY 的 IPQ 设备与官方 ImmortalWrt 的 MTK 设备，仍然发布到这同一个项目；源码类型、源码提交、target/subtarget 和软件包架构在站点内部用目录区分。同源码、同平台、同架构的设备共用用户态软件包并集，不为每个机型创建独立用户态源。内核模块另按 target/subtarget 和最终配置摘要隔离，并记录实际 `vermagic`，避免 WiFi/无 WiFi 等配置的内核模块互相覆盖。
 
-每次运行使用独立的 `build-<run_id>-<run_attempt>` Pages 预览分支；固件写入该分支域名以及自己对应的源码、架构和内核目录，因此后续其他编译不会把旧固件的源切换成新一批包。仓库需配置 `CLOUDFLARE_ACCOUNT_ID` 与 `CLOUDFLARE_API_TOKEN` 两项 Actions secrets；缺少凭据时仍生成完整的 `apk-packages` artifact，但跳过在线部署，设备端源在完成部署后才可使用。
+每次运行使用独立的 `build-<run_id>-<run_attempt>` Pages 预览分支；固件写入该分支域名以及自己对应的源码、架构和内核目录，因此后续其他编译不会把旧固件的源切换成新一批包。仓库需配置 `CLOUDFLARE_ACCOUNT_ID` 与 `CLOUDFLARE_API_TOKEN` 两项 Actions secrets；缺少凭据时仍生成完整的 `apk-packages` Artifact，但跳过在线部署，设备端源在完成部署后才可使用。
 
 ```text
 https://build-<run_id>-<run_attempt>.<软件源域名>/<源码类型>/<源码短哈希>/packages/<target>/<subtarget>/<架构>/packages.adb
@@ -46,7 +50,7 @@ https://build-<run_id>-<run_attempt>.<软件源域名>/<源码类型>/<源码短
 
 合并时检查产物数量、发布标识、同类源码的提交以及内核 ABI。同路径相同包名和版本按稳定顺序保留一份；不同版本使用不同文件名并一起进入索引。为保证本次站点完整，任何设备失败都会阻止统一发布；重跑时请选择整个工作流，避免混入不同 `run_attempt` 的固件地址。构建用 host apk 及其运行库只包含在短期中间 artifact 中，不会保存到最终归档或部署到站点。APK 大小达到或超过 25 MiB（26,214,400 字节）时会从 feed 和索引中排除，并记录清单；由于其不在 `apk-packages` 中，超限包需自行从构建产物外获取。依赖缺失或版本不兼容会明确报错，不会静默生成缺依赖的软件源。
 
-`WRT_RELEASE_FIRMWARE` 控制是否发布逐设备固件 Release；`WRT_RELEASE_PACKAGES` 独立控制是否创建一个 `apk-packages-build-<run_id>-<run_attempt>` Release，里面是本次各平台下载 ZIP。`WRT_UPLOAD_PACKAGES_ARTIFACT` 控制是否保存汇总的 `apk-packages` Artifact。CORE 的逐设备固件信息包作为 `<构建名>-firmware` Artifact 直接上传；PUBLISH 下载它们用于可选的逐设备 Release，不再创建重复的汇总 `firmware` Artifact。固件 Release 只包含对应设备的固件、配置和说明；插件包 Release 只包含单独整理的按平台 ZIP。
+`WRT_RELEASE_FIRMWARE` 控制是否发布逐设备固件 Release；`WRT_RELEASE_PACKAGES` 独立控制是否创建一个 `apk-packages-build-<run_id>-<run_attempt>` Release，里面是本次各平台下载 ZIP，可逐个直接下载。`WRT_UPLOAD_PACKAGES_ARTIFACT` 控制是否保存汇总的 `apk-packages` Artifact；其中按平台分目录保存整理后的文件，下载后解压一层即可看到各平台目录。CORE 的逐设备固件信息包作为 `<构建名>-firmware` Artifact 直接上传；PUBLISH 下载它们用于可选的逐设备 Release，不再创建重复的汇总 `firmware` Artifact。固件 Release 只包含对应设备的固件、配置和说明；插件包 Release 只包含单独整理的按平台 ZIP。
 
 设备启动后可执行：
 
@@ -64,7 +68,7 @@ apk add <软件包名>
 - `CORE-ALL.yml`：单设备克隆、配置、编译并上传固件信息 ZIP 与 feed 中间产物。
 - `PUBLISH-OUTPUTS.yml`：由入口统一调用，下载并整理各型号固件信息包供可选 Release，部署合并后的软件源，单独整理平台 APK 下载包并按开关保存 Artifact 或发布 Release。
 
-所有 workflow 注释、README 和脚本提示以简体中文维护。最终 Artifacts 包括各 CORE 上传的 `<构建名>-firmware` 单设备包，以及可选的一份 `apk-packages` 汇总 Artifact（内含带源码短 hash 的各平台 ZIP）。
+所有 workflow 注释、README 和脚本提示以简体中文维护。最终 Artifacts 包括各 CORE 上传的 `<构建名>-firmware` 单设备包，以及可选的一份 `apk-packages` 汇总 Artifact（内含按源码短 hash、target/subtarget 和架构分开的整理目录，不含平台 ZIP 文件）。
 
 ## 本地验证
 

@@ -76,15 +76,22 @@ jobs:
 
       - name: 单独整理 Artifact/Release 用的平台 APK 包
         run: |
+          APK_TOOL=$(find feed-artifacts -path '*/tools/run-apk' -type f | sort | head -n1)
+          if [ -z "$APK_TOOL" ]; then
+            echo '【产物】缺少 APK 工具，无法校验插件目录中的依赖版本' >&2
+            exit 1
+          fi
+          chmod +x "$APK_TOOL" "$(dirname "$APK_TOOL")/apk"
           python3 Scripts/ci_organize_apk_packages.py \
-            --input merged-feed-packages/feed --output package-archives
+            --input merged-feed-packages/feed --output package-archives \
+            --artifact-output package-artifacts --apk "$APK_TOOL"
 
       - name: 保存平台 APK 包 Artifact
         if: inputs.WRT_UPLOAD_PACKAGES_ARTIFACT
         uses: actions/upload-artifact@v6.0.0
         with:
           name: apk-packages
-          path: package-archives/
+          path: package-artifacts/
           compression-level: 0
           if-no-files-found: error
 
@@ -98,7 +105,7 @@ jobs:
             echo 'ready=true' >> "$GITHUB_OUTPUT"
           else
             echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo '【软件源】完整包已保存在 apk-packages 中按平台区分的 ZIP 内；发布需要配置 CLOUDFLARE_ACCOUNT_ID 和 CLOUDFLARE_API_TOKEN'
+            echo '【软件源】完整包已保存在 apk-packages 中按平台分目录保存；发布需要配置 CLOUDFLARE_ACCOUNT_ID 和 CLOUDFLARE_API_TOKEN'
           fi
 
       - name: 一次部署完整软件源到 Cloudflare Pages
