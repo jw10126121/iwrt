@@ -41,7 +41,7 @@ on:
 permissions: write-all
 
 #CI任务
-# 四个设备统一使用外部选择的 SOURCE_TYPE；非 IPQ 设备自动切换为官方 ImmortalWrt。
+# 启用的设备统一使用外部选择的 SOURCE_TYPE；非 IPQ 设备自动切换为官方 ImmortalWrt。
 jobs:
   # cmiot_ax18_nowifi_fw4:
   #   name: cmiot-ax18-nowifi-fw4-base
@@ -138,11 +138,10 @@ jobs:
     needs:
       - cmiot_ax18_nowifi_fw4_frps
       - gl_mt6000_nowifi_fw4
-      - gl_mt6000_wifi_fw4
       - jd_ax6600_wifi_fw4
     uses: ./.github/workflows/PUBLISH-OUTPUTS.yml
     with:
       WRT_FEED_HOST: ${{ inputs.WRT_FEED_HOST }}
       WRT_RELEASE_FIRMWARE: ${{ inputs.WRT_RELEASE_FIRMWARE }}
-      WRT_EXPECTED_BUILDS: 4
+      WRT_EXPECTED_BUILDS: 3
     secrets: inherit
