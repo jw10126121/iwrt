@@ -54,7 +54,7 @@ class MergeFeedsTest(unittest.TestCase):
         (kmods / "vermagic").write_text(vermagic + "\n")
         (artifact / "manifest.json").write_text(json.dumps({
             "source_type": source, "source_commit": commit, "source_tag": commit[:7],
-            "deployment_tag": "build-123-1", "feed_host": "lin-iwrt.pages.dev",
+            "deployment_tag": commit[:7], "feed_host": "lin-iwrt.pages.dev",
             "arch": arch, "target": target, "subtarget": subtarget,
             "kernel_id": kernel, "vermagic": vermagic,
         }))
@@ -79,6 +79,7 @@ class MergeFeedsTest(unittest.TestCase):
                       kernel="2222222222222222", vermagic="abi-two")
         result = self.merge(4)
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('"source_tags": ["aaaaaaa", "bbbbbbb"]', result.stdout)
         index = self.output / "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/packages.adb"
         self.assertEqual(index.read_text().splitlines(),
                          ["demo-1.0.apk", "frps-1.0.apk", "wifi-1.0.apk"])
@@ -89,7 +90,7 @@ class MergeFeedsTest(unittest.TestCase):
         self.assertTrue((self.output / "index.html").is_file())
         self.assertEqual(
             sorted(path.relative_to(self.packages_output).as_posix()
-                   for path in self.packages_output.rglob("*.apk")),
+                   for path in (self.packages_output / "feed").rglob("*.apk")),
             [
                 "feed/immortalwrt/bbbbbbb/kmods/mediatek/filogic/1111111111111111/kmod-demo-1.0.apk",
                 "feed/immortalwrt/bbbbbbb/kmods/mediatek/filogic/2222222222222222/kmod-demo-1.0.apk",
@@ -209,7 +210,7 @@ class MergeFeedsTest(unittest.TestCase):
             self.assertIn("feed/" + relative, archive.namelist())
             self.assertFalse(any("ipq60xx" in name for name in archive.namelist()))
 
-    def test_limit_and_larger_packages_are_excluded_from_feed_and_archive(self):
+    def test_limit_and_larger_packages_are_excluded_from_pages_feed_archive(self):
         artifact = self.artifact("one", packages=("demo-1.0.apk", "boundary-1.0.apk", "large-1.0.apk"))
         directory = artifact / "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53"
         for name, size in (("boundary", 25 * 1024 * 1024), ("large", 25 * 1024 * 1024 + 1)):
@@ -225,6 +226,25 @@ class MergeFeedsTest(unittest.TestCase):
         with zipfile.ZipFile(next((self.root / "archives").glob("*.zip"))) as archive:
             names = archive.namelist()
             self.assertFalse(any(name.endswith(("boundary-1.0.apk", "large-1.0.apk")) for name in names))
+
+    def test_independent_plugin_pool_keeps_apks_excluded_from_pages(self):
+        artifact = self.artifact("one", packages=("demo-1.0.apk", "large-1.0.apk"))
+        large = artifact / "libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53/large-1.0.apk"
+        with large.open("wb") as package:
+            package.truncate(25 * 1024 * 1024)
+        result = self.merge(1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        relative = Path("libwrt/aaaaaaa/packages/qualcommax/ipq60xx/aarch64_cortex-a53")
+        plugin_pool = self.packages_output / "plugins"
+        self.assertFalse((self.output / relative / "large-1.0.apk").exists())
+        self.assertTrue((plugin_pool / relative / "large-1.0.apk").is_file())
+        self.assertEqual((plugin_pool / relative / "large-1.0.apk").stat().st_size,
+                         25 * 1024 * 1024)
+        self.assertFalse(list(plugin_pool.rglob("packages.adb")))
+        self.assertTrue((plugin_pool / "libwrt/aaaaaaa/kmods/qualcommax/ipq60xx/1111111111111111/vermagic").is_file())
+        plugin_excluded = json.loads((plugin_pool / "excluded-packages.json").read_text())
+        self.assertEqual([item["path"] for item in plugin_excluded],
+                         [(relative / "large-1.0.apk").as_posix()])
 
     def test_final_platform_archive_contains_only_feed_packages(self):
         artifact = self.artifact("one")
@@ -307,7 +327,7 @@ class MergeFeedsTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("内核 ABI 不一致", result.stderr)
 
-    def test_different_runs_cannot_be_mixed(self):
+    def test_deployment_branch_must_match_source_hash(self):
         self.artifact("one")
         second = self.artifact("two")
         path = second / "manifest.json"
@@ -316,7 +336,7 @@ class MergeFeedsTest(unittest.TestCase):
         path.write_text(json.dumps(manifest))
         result = self.merge(2)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("发布标识不一致", result.stderr)
+        self.assertIn("部署分支必须与源码短 Hash 一致", result.stderr)
 
 
 if __name__ == "__main__":

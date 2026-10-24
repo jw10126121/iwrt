@@ -186,12 +186,12 @@ on:
         type: string
         default: '192.168.0.1'
       WRT_RELEASE_FIRMWARE:
-        description: '发布固件'
+        description: '是否将各平台固件 ZIP 加入统一 Release'
         required: false
         type: boolean
         default: false
       WRT_RELEASE_PACKAGES:
-        description: '是否将按平台整理的 APK feed 包发布到独立 Release'
+        description: '是否将各平台插件 ZIP 加入统一 Release'
         required: false
         type: boolean
         default: false

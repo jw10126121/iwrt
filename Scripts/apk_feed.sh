@@ -15,9 +15,8 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=Scripts/lib/source_type.sh
 . "$SCRIPT_DIR/lib/source_type.sh"
 SOURCE_TYPE=$(resolve_source_type "${SOURCE_TYPE:-auto}" "$ROOT")
-# 一次工作流只有一个部署分支；源码版本和平台在站点内部隔离。
-DEPLOY_TAG=${APK_FEED_DEPLOY_TAG:-${GITHUB_RUN_ID:+build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}}}
-DEPLOY_TAG=${DEPLOY_TAG:-$FEED_TAG}
+# 固件使用源码短 Hash 对应的 Pages 分支；一次工作流可部署多个源码分支。
+DEPLOY_TAG=${APK_FEED_DEPLOY_TAG:-$FEED_TAG}
 FEED_HOST=${FEED_HOST#https://}; FEED_HOST=${FEED_HOST#http://}; FEED_HOST=${FEED_HOST%%/*}
 PREFIX="$SOURCE_TYPE/$FEED_TAG"
 

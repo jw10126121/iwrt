@@ -14,6 +14,8 @@ import zipfile
 from functools import lru_cache
 from pathlib import Path
 
+from ci_platform import platform_archive_name
+
 
 def require(condition, message):
     if not condition:
@@ -148,12 +150,17 @@ def organize(args):
     require(not args.artifact_output.exists(),
             f"Artifact 输出目录已存在，拒绝覆盖：{args.artifact_output}")
     groups = {}
-    # feed/<source>/<revision>/packages/<target>/<subtarget>/<arch>/packages.adb
-    for index in sorted(args.input.glob("*/*/packages/*/*/*/packages.adb")):
-        source, revision, _, target, subtarget, arch = index.relative_to(args.input).parts[:6]
+    # Accept both indexed feeds and the standalone package pool, which has no packages.adb.
+    for userspace in sorted(args.input.glob("*/*/packages/*/*/*")):
+        if not userspace.is_dir():
+            continue
+        if not (userspace.joinpath("packages.adb").is_file()
+                or next(userspace.glob("*.apk"), None)):
+            continue
+        source, revision, _, target, subtarget, arch = userspace.relative_to(args.input).parts
         identity = (source, revision, target, subtarget, arch)
-        groups.setdefault(identity, {"userspace": index.parent, "kmods": []})
-    require(groups, "合并后的 feed 中没有用户态软件包索引")
+        groups.setdefault(identity, {"userspace": userspace, "kmods": []})
+    require(groups, "插件包目录中没有可整理的用户态 APK")
     for source, revision, target, subtarget, arch in groups:
         for vermagic in sorted((args.input / source / revision / "kmods" / target / subtarget).glob("*/vermagic")):
             groups[(source, revision, target, subtarget, arch)]["kmods"].append(vermagic.parent)
@@ -165,7 +172,9 @@ def organize(args):
     manual_groups = load_manual_groups(args.organize_script)
     for identity, repositories in sorted(groups.items()):
         source, revision, target, subtarget, arch = identity
-        filename = f"{source}-{revision}-{target}-{subtarget}-{arch}-packages.zip"
+        platform = {"source_type": source, "source_tag": revision, "target": target,
+                    "subtarget": subtarget, "arch": arch}
+        filename = platform_archive_name(platform, "plugins")
         artifact_dir = args.artifact_output / Path(filename).stem
         artifact_dir.mkdir()
         selected_dirs = [repositories["userspace"], *repositories["kmods"]]
@@ -192,7 +201,8 @@ def organize(args):
             "packages/：用户态插件与依赖 APK。\n"
             "kmods/<kernel_id>/：内核模块 APK、vermagic。不同 kernel_id 不可混用。\n"
             "此归档不包含 packages.adb；设备在线安装请使用对应 Pages feed。\n"
-            "excluded-packages.json 记录因 Cloudflare 单文件大小限制排除的 APK。\n"
+            "excluded-packages.json 记录 Pages feed 因 Cloudflare 单文件限制排除的 APK；"
+            "这些 APK 仍包含在本归档中。\n"
         )
         with zipfile.ZipFile(args.output / filename, "w", compression=zipfile.ZIP_STORED) as archive:
             for package in sorted(repositories["userspace"].glob("*.apk")):
@@ -261,7 +271,7 @@ def organize(args):
                 (plugin_dir / "说明.txt").write_text(plugin_readme)
                 archive.write(plugin_dir / "说明.txt",
                               (Path(plugin_dir.name) / "说明.txt").as_posix())
-    print(f"【产物】已整理 Artifact/Release 平台 APK 包：{len(groups)} 个平台目录和 ZIP")
+    print(f"【产物】已整理 Artifact/Release 平台插件包：{len(groups)} 个平台目录和 ZIP")
 
 
 def main():

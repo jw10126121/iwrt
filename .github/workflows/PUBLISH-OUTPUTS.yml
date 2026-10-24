@@ -33,7 +33,7 @@ permissions:
 
 jobs:
   publish:
-    name: 整理固件、合并软件源并生成下载归档
+    name: 整理固件与插件包并统一发布
     runs-on: ubuntu-24.04
     steps:
       - name: 检出项目
@@ -60,7 +60,8 @@ jobs:
         run: |
           python3 Scripts/ci_build_outputs.py organize \
             --input build-artifacts --firmware-input firmware-artifacts \
-            --output firmware --work firmware-work \
+            --output firmware --platform-firmware-output platform-firmware-archives \
+            --work firmware-work \
             --feeds-output feed-artifacts --expected-count "$EXPECTED_BUILDS"
 
       - name: 按平台汇总插件并重建软件源索引
@@ -74,7 +75,7 @@ jobs:
             --packages-output merged-feed-packages \
             --expected-count "$EXPECTED_BUILDS" --host "$FEED_HOST"
 
-      - name: 单独整理 Artifact/Release 用的平台 APK 包
+      - name: 单独整理 Artifact/Release 用的平台插件包
         run: |
           APK_TOOL=$(find feed-artifacts -path '*/tools/run-apk' -type f | sort | head -n1)
           if [ -z "$APK_TOOL" ]; then
@@ -83,7 +84,7 @@ jobs:
           fi
           chmod +x "$APK_TOOL" "$(dirname "$APK_TOOL")/apk"
           python3 Scripts/ci_organize_apk_packages.py \
-            --input merged-feed-packages/feed --output package-archives \
+            --input merged-feed-packages/plugins --output plugin-archives \
             --artifact-output package-artifacts --apk "$APK_TOOL"
 
       - name: 保存平台 APK 包 Artifact
@@ -108,29 +109,35 @@ jobs:
             echo '【软件源】完整包已保存在 apk-packages 中按平台分目录保存；发布需要配置 CLOUDFLARE_ACCOUNT_ID 和 CLOUDFLARE_API_TOKEN'
           fi
 
-      - name: 一次部署完整软件源到 Cloudflare Pages
+      - name: 按源码短 Hash 部署软件源到 Cloudflare Pages
         if: inputs.WRT_FEED_HOST != '' && steps.credentials.outputs.ready == 'true'
-        uses: cloudflare/wrangler-action@v3
-        with:
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: >-
-            pages deploy public
-            --project-name="${{ steps.merge.outputs.project }}"
-            --branch="${{ steps.merge.outputs.tag }}"
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PAGES_PROJECT: ${{ steps.merge.outputs.project }}
+          SOURCE_TAGS: ${{ steps.merge.outputs.source_tags }}
+        run: |
+          IFS=',' read -r -a source_tags <<< "$SOURCE_TAGS"
+          for source_tag in "${source_tags[@]}"; do
+            npx --yes wrangler@4 pages deploy public \
+              --project-name="$PAGES_PROJECT" --branch="$source_tag"
+          done
 
-      - name: 按设备型号发布固件 Release
-        if: inputs.WRT_RELEASE_FIRMWARE
+      - name: 发布按平台整理的固件与插件 Release
+        if: inputs.WRT_RELEASE_FIRMWARE || inputs.WRT_RELEASE_PACKAGES
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_FIRMWARE: ${{ inputs.WRT_RELEASE_FIRMWARE }}
+          RELEASE_PACKAGES: ${{ inputs.WRT_RELEASE_PACKAGES }}
         run: |
-          python3 Scripts/ci_build_outputs.py release \
-            --output firmware --work firmware-work
-
-      - name: 发布按平台整理的 APK feed Release
-        if: inputs.WRT_RELEASE_PACKAGES
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python3 Scripts/ci_build_outputs.py release-packages \
-            --output firmware --work firmware-work --packages-input package-archives
+          release_args=()
+          if [ "$RELEASE_FIRMWARE" = "true" ]; then
+            release_args+=(--firmware)
+          fi
+          if [ "$RELEASE_PACKAGES" = "true" ]; then
+            release_args+=(--packages)
+          fi
+          python3 Scripts/ci_build_outputs.py release-platforms \
+            --work firmware-work \
+            --firmware-input platform-firmware-archives \
+            --plugins-input plugin-archives "${release_args[@]}"

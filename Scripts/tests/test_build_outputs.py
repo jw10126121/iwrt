@@ -29,7 +29,8 @@ class BuildOutputsTest(unittest.TestCase):
                               env=environment or self.environment, text=True,
                               capture_output=True, check=False)
 
-    def export(self, device="gl-mt6000-wifi", prefix="test-build", target="glinet_gl-mt6000"):
+    def export(self, device="gl-mt6000-wifi", prefix="test-build", target="glinet_gl-mt6000",
+               platform=None):
         build = self.root / prefix
         firmware = build / "bin/targets/test/testsub"
         firmware.mkdir(parents=True)
@@ -44,13 +45,23 @@ class BuildOutputsTest(unittest.TestCase):
         (firmware / "packages/demo.apk").write_text("不能混入固件的包")
         feed = self.root / (prefix + "-feed")
         feed.mkdir()
-        (feed / "manifest.json").write_text(json.dumps({"deployment_tag": "build-123-1"}))
+        platform = platform or {
+            "source_type": "libwrt", "source_commit": "a" * 40, "source_tag": "abc1234",
+            "target": "qualcommax", "subtarget": "ipq60xx", "arch": "aarch64_cortex-a53",
+            "kernel_id": "1111111111111111", "vermagic": "6.6.80-test",
+        }
+        feed_meta = {"deployment_tag": "abc1234", "feed_host": "lin-iwrt.pages.dev",
+                     **platform}
+        (feed / "manifest.json").write_text(json.dumps(feed_meta))
         (feed / "demo.apk").write_text("插件留在软件源")
-        userspace = feed / "immortalwrt/abc1234/packages/test/testsub/testarch"
+        userspace = feed / platform["source_type"] / platform["source_tag"] / "packages" / platform["target"] / platform["subtarget"] / platform["arch"]
         userspace.mkdir(parents=True)
         (userspace / "packages.adb").write_text("索引")
         (userspace / "demo.apk").write_text("插件")
-        offline = feed / "offline/immortalwrt/abc1234/packages/test/testsub/testarch"
+        kmods = feed / platform["source_type"] / platform["source_tag"] / "kmods" / platform["target"] / platform["subtarget"] / platform["kernel_id"]
+        kmods.mkdir(parents=True)
+        (kmods / "vermagic").write_text(platform["vermagic"] + "\n")
+        offline = feed / "offline" / platform["source_type"] / platform["source_tag"] / "packages" / platform["target"] / platform["subtarget"] / platform["arch"]
         offline.mkdir(parents=True)
         (offline / "builtin.apk").write_text("内置包")
         output = self.inputs / prefix
@@ -82,6 +93,7 @@ class BuildOutputsTest(unittest.TestCase):
         return self.run_script("organize", "--input", self.inputs,
                                "--firmware-input", firmware_input,
                                "--output", self.root / "firmware",
+                               "--platform-firmware-output", self.root / "platform-firmware-archives",
                                "--work", self.root / "work",
                                "--feeds-output", self.root / "feeds",
                                "--expected-count", count)
@@ -90,6 +102,7 @@ class BuildOutputsTest(unittest.TestCase):
         return self.run_script("organize", "--input", self.inputs,
                                "--firmware-input", self.root / "firmware-artifacts",
                                "--output", self.root / "firmware",
+                               "--platform-firmware-output", self.root / "platform-firmware-archives",
                                "--work", self.root / "work",
                                "--feeds-output", self.root / "feeds",
                                "--expected-count", count)
@@ -148,6 +161,22 @@ class BuildOutputsTest(unittest.TestCase):
         self.assertEqual(list(output.rglob("*Packages*")), [])
         self.assertTrue((self.root / "feeds/test-build/manifest.json").is_file())
         self.assertTrue((self.root / "work/test-build/readme_release.txt").is_file())
+        self.assertTrue((self.root / "platform-firmware-archives/libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-firmware.zip").is_file())
+
+    def test_platform_firmware_archive_groups_device_variants(self):
+        self.export(device="gl-mt6000-wifi", prefix="mt6000-wifi")
+        self.export(device="gl-mt6000-nowifi", prefix="mt6000-nowifi")
+        result = self.organize(2)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        firmware_zip = self.root / "platform-firmware-archives/libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-firmware.zip"
+        self.assertTrue(firmware_zip.is_file())
+        with zipfile.ZipFile(firmware_zip) as archive:
+            names = set(archive.namelist())
+        self.assertIn("devices/mt6000-wifi/mt6000-wifi_squashfs-sysupgrade.bin", names)
+        self.assertIn("devices/mt6000-nowifi/mt6000-nowifi_squashfs-sysupgrade.bin", names)
+        self.assertIn("devices/mt6000-wifi/config_mt6000-wifi.txt", names)
+        self.assertIn("devices/mt6000-nowifi/readme_mt6000-nowifi.txt", names)
+        self.assertIn("平台信息.json", names)
 
     def test_multiple_devices_and_variants_have_separate_firmware_directories(self):
         self.export(prefix="mt6000-wifi")
@@ -196,10 +225,13 @@ class BuildOutputsTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / "escaped").exists())
 
-    def test_existing_release_uploads_only_device_firmware(self):
+    def test_platform_release_uploads_firmware_and_plugin_archives_together(self):
         self.export()
         result = self.organize()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        plugins = self.root / "plugin-archives"
+        plugins.mkdir()
+        (plugins / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-plugins.zip").write_text("plugins")
         executable = self.root / "tools"
         executable.mkdir()
         gh = executable / "gh"
@@ -208,22 +240,24 @@ class BuildOutputsTest(unittest.TestCase):
         gh.chmod(0o755)
         env = dict(self.environment, PATH=str(executable) + os.pathsep + os.environ["PATH"],
                    GH_LOG=str(self.root / "gh.log"))
-        result = self.run_script("release", "--output", self.root / "firmware",
-                                 "--work", self.root / "work", environment=env)
+        result = self.run_script("release-platforms", "--work", self.root / "work",
+                                 "--firmware-input", self.root / "platform-firmware-archives",
+                                 "--plugins-input", plugins, "--firmware", "--packages",
+                                 environment=env)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         commands = [json.loads(line) for line in (self.root / "gh.log").read_text().splitlines()]
         self.assertEqual([command[1] for command in commands], ["view", "edit", "upload"])
-        self.assertEqual(commands[-1][2], "test-build")
-        self.assertTrue(any(item.endswith("test-build_squashfs-sysupgrade.bin") for item in commands[-1]))
-        self.assertFalse(any("Packages" in item or item.endswith(".apk") for item in commands[-1]))
+        self.assertEqual(commands[-1][2], "build-outputs-123-1")
+        self.assertTrue(any(item.endswith("-firmware.zip") for item in commands[-1]))
+        self.assertTrue(any(item.endswith("-plugins.zip") for item in commands[-1]))
 
-    def test_platform_packages_can_be_published_to_a_separate_release(self):
+    def test_platform_release_can_publish_only_plugin_archives(self):
         self.export()
         result = self.organize()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        packages = self.root / "package-archives"
-        packages.mkdir()
-        (packages / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-packages.zip").write_text("feed zip")
+        plugins = self.root / "plugin-archives"
+        plugins.mkdir()
+        (plugins / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-plugins.zip").write_text("plugins")
         executable = self.root / "tools"
         executable.mkdir()
         gh = executable / "gh"
@@ -231,15 +265,16 @@ class BuildOutputsTest(unittest.TestCase):
                       "with open(os.environ['GH_LOG'], 'a') as log: log.write(json.dumps(sys.argv[1:]) + '\\n')\n")
         gh.chmod(0o755)
         env = dict(self.environment, PATH=str(executable) + os.pathsep + os.environ["PATH"],
-                   GH_LOG=str(self.root / "gh-packages.log"))
-        result = self.run_script("release-packages", "--output", self.root / "firmware",
-                                 "--work", self.root / "work", "--packages-input", packages,
-                                 environment=env)
+                   GH_LOG=str(self.root / "gh.log"))
+        result = self.run_script("release-platforms", "--work", self.root / "work",
+                                 "--firmware-input", self.root / "platform-firmware-archives",
+                                 "--plugins-input", plugins, "--packages", environment=env)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        commands = [json.loads(line) for line in (self.root / "gh-packages.log").read_text().splitlines()]
-        self.assertEqual([command[1] for command in commands], ["view", "edit", "upload"])
-        self.assertEqual(commands[-1][2], "apk-packages-build-123-1")
-        self.assertTrue(any(item.endswith("-packages.zip") for item in commands[-1]))
+        commands = [json.loads(line) for line in (self.root / "gh.log").read_text().splitlines()]
+        self.assertEqual(commands[-1][1], "upload")
+        self.assertEqual(commands[-1][2], "build-outputs-123-1")
+        self.assertTrue(any(item.endswith("-plugins.zip") for item in commands[-1]))
+        self.assertFalse(any(item.endswith("-firmware.zip") for item in commands[-1]))
 
 
 if __name__ == "__main__":

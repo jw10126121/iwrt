@@ -59,8 +59,8 @@ test -f "$TMP_ROOT/bundled.adb"
 
 export WRT_FEED_HOST=feeds.example.net
 bash "$ROOT_DIR/Scripts/apk_feed.sh" firmware
-grep -Fxq 'https://build-123-1.feeds.example.net/immortalwrt/abc1234/packages/test/testsub/testarch/packages.adb' "$OPENWRT_PATH/files/etc/apk/repositories.d/extra-feeds.list"
-grep -Fxq "https://build-123-1.feeds.example.net/immortalwrt/abc1234/kmods/test/testsub/$kernel_id/packages.adb" "$OPENWRT_PATH/files/etc/apk/repositories.d/extra-feeds.list"
+grep -Fxq 'https://abc1234.feeds.example.net/immortalwrt/abc1234/packages/test/testsub/testarch/packages.adb' "$OPENWRT_PATH/files/etc/apk/repositories.d/extra-feeds.list"
+grep -Fxq "https://abc1234.feeds.example.net/immortalwrt/abc1234/kmods/test/testsub/$kernel_id/packages.adb" "$OPENWRT_PATH/files/etc/apk/repositories.d/extra-feeds.list"
 
 # firmware 阶段写入的内核目录标识必须被后续 collect 复用。
 printf 'CONFIG_PACKAGE_later=m\n' >> "$OPENWRT_PATH/.config"
@@ -87,17 +87,17 @@ import pathlib, sys
 from urllib.parse import urlparse
 for url in pathlib.Path(sys.argv[1]).read_text().splitlines():
     parsed = urlparse(url)
-    assert parsed.netloc == "build-123-1.lin-iwrt.pages.dev", url
+    assert parsed.netloc == "abc1234.lin-iwrt.pages.dev", url
     assert (pathlib.Path(sys.argv[2]) / parsed.path.lstrip("/")).is_file(), url
 PY
 grep -Fxq 'project=lin-iwrt' "$TMP_ROOT/publish-output"
-grep -Fxq 'tag=build-123-1' "$TMP_ROOT/publish-output"
+grep -Fxq 'source_tags=abc1234' "$TMP_ROOT/publish-output"
 test ! -e "$TMP_ROOT/public/tools"
 test ! -e "$TMP_ROOT/public/manifest.json"
 
 kernel_id=$(cat "$OPENWRT_PATH/.apk-feed-kernel-id")
 
-# 超限 APK 不阻止收集；汇总时从可发布 feed 与平台 ZIP 一并排除，并记录原因。
+# 超限 APK 不阻止收集；Pages feed 排除它，但独立插件包池仍保留它。
 python3 - "$OPENWRT_PATH/bin/packages/testarch/feed/demo-1.0-r1.apk" <<'PYTEST'
 import sys
 with open(sys.argv[1], "wb") as package:
@@ -112,6 +112,8 @@ python3 "$ROOT_DIR/Scripts/merge_apk_feeds.py" \
     --expected-count 1
 test ! -e "$TMP_ROOT/small-public/immortalwrt/abc1234/packages/test/testsub/testarch/demo-1.0-r1.apk"
 test ! -e "$TMP_ROOT/all-packages/offline/immortalwrt/abc1234/packages/test/testsub/testarch/demo-1.0-r1.apk"
+test -f "$TMP_ROOT/all-packages/plugins/immortalwrt/abc1234/packages/test/testsub/testarch/demo-1.0-r1.apk"
+test ! -e "$TMP_ROOT/all-packages/plugins/immortalwrt/abc1234/packages/test/testsub/testarch/packages.adb"
 grep -Fq 'demo-1.0-r1.apk' "$TMP_ROOT/small-public/excluded-packages.json"
 test ! -e "$TMP_ROOT/archives/immortalwrt-abc1234-test-testsub-testarch-packages.zip" || \
   ! unzip -l "$TMP_ROOT/archives/immortalwrt-abc1234-test-testsub-testarch-packages.zip" | \

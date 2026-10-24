@@ -51,7 +51,7 @@ class FeedWorkflowTest(unittest.TestCase):
         self.assertTrue(all(step["with"]["if-no-files-found"] == "error" for step in uploads))
         self.assertTrue(all("continue-on-error" not in step for step in uploads))
 
-    def test_publisher_organizes_firmware_and_deploys_one_complete_feed(self):
+    def test_publisher_organizes_firmware_and_deploys_feed_for_source_hashes(self):
         publisher = workflow("PUBLISH-OUTPUTS.yml")["jobs"]["publish"]
         self.assertNotIn("if", publisher)
         steps = publisher["steps"]
@@ -60,9 +60,10 @@ class FeedWorkflowTest(unittest.TestCase):
         self.assertEqual({step["with"]["pattern"] for step in downloads},
                          {"*-feed", "*-firmware"})
         self.assertTrue(all(not step["with"]["merge-multiple"] for step in downloads))
-        deploys = [step for step in steps if "cloudflare/" in step.get("uses", "")]
+        deploys = [step for step in steps if "wrangler@4 pages deploy public" in step.get("run", "")]
         self.assertEqual(len(deploys), 1)
-        self.assertIn("pages deploy public", deploys[0]["with"]["command"])
+        self.assertEqual(deploys[0]["env"]["SOURCE_TAGS"], "${{ steps.merge.outputs.source_tags }}")
+        self.assertIn('for source_tag in "${source_tags[@]}"', deploys[0]["run"])
         uploads = [step for step in steps if "actions/upload-artifact@" in step.get("uses", "")]
         self.assertEqual({step["with"]["name"] for step in uploads}, {"apk-packages"})
         self.assertEqual(uploads[0]["with"]["path"], "package-artifacts/")
@@ -73,15 +74,15 @@ class FeedWorkflowTest(unittest.TestCase):
         self.assertIn("--firmware-input firmware-artifacts", commands)
         self.assertIn("merge_apk_feeds.py", commands)
         self.assertIn("ci_organize_apk_packages.py", commands)
-        self.assertIn("--input merged-feed-packages/feed --output package-archives", commands)
+        self.assertIn("--input merged-feed-packages/plugins --output plugin-archives", commands)
         self.assertIn("--artifact-output package-artifacts", commands)
         self.assertIn("--apk \"$APK_TOOL\"", commands)
-        releases = [step for step in steps if "ci_build_outputs.py release \\" in step.get("run", "")]
+        self.assertIn("--platform-firmware-output platform-firmware-archives", commands)
+        releases = [step for step in steps if "ci_build_outputs.py release-platforms" in step.get("run", "")]
         self.assertEqual(len(releases), 1)
-        self.assertEqual(releases[0]["if"], "inputs.WRT_RELEASE_FIRMWARE")
-        package_releases = [step for step in steps if "ci_build_outputs.py release-packages" in step.get("run", "")]
-        self.assertEqual(len(package_releases), 1)
-        self.assertEqual(package_releases[0]["if"], "inputs.WRT_RELEASE_PACKAGES")
+        self.assertEqual(releases[0]["if"], "inputs.WRT_RELEASE_FIRMWARE || inputs.WRT_RELEASE_PACKAGES")
+        self.assertIn("--firmware-input platform-firmware-archives", releases[0]["run"])
+        self.assertIn("--plugins-input plugin-archives", releases[0]["run"])
 
 
 if __name__ == "__main__":

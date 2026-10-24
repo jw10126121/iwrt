@@ -49,10 +49,8 @@ def merge(args):
     require(not args.packages_output.exists(), f"包归档目录已存在，拒绝覆盖：{args.packages_output}")
     entries = [(path.parent, json.loads(path.read_text())) for path in manifests]
     host = entries[0][1]["feed_host"]
-    tag = entries[0][1]["deployment_tag"]
     require(not host or re.fullmatch(r"[a-z0-9-]+\.pages\.dev", host),
             "软件源主机必须是 Pages 项目域名")
-    require(re.fullmatch(r"[a-z0-9-]+", tag), "无效的发布标识")
     if args.host:
         require(args.host.removeprefix("https://").removeprefix("http://").split("/")[0] == host,
                 "发布主机与固件软件源主机不一致")
@@ -61,13 +59,17 @@ def merge(args):
     commits = {}
     kernels = {}
     repositories = {}
+    source_tags = set()
     # 所有元数据先校验，再生成站点；不允许混入缺失、旧版本或其他运行的产物。
     for artifact, meta in entries:
         require(meta["feed_host"] == host, "软件源主机不一致")
-        require(meta["deployment_tag"] == tag, "发布标识不一致")
-        for key in ("source_type", "source_commit", "source_tag", "arch", "target", "subtarget", "kernel_id"):
+        for key in ("source_type", "source_commit", "source_tag", "deployment_tag",
+                    "arch", "target", "subtarget", "kernel_id"):
             require(re.fullmatch(r"[A-Za-z0-9_.-]+", meta[key]) and meta[key] not in (".", ".."),
                     f"无效的软件源字段：{key}")
+        require(meta["deployment_tag"] == meta["source_tag"],
+                "部署分支必须与源码短 Hash 一致")
+        source_tags.add(meta["source_tag"])
         source = meta["source_type"]
         identity = (meta["source_commit"], meta["source_tag"])
         require(commits.setdefault(source, identity) == identity,
@@ -95,7 +97,9 @@ def merge(args):
             for package in sorted((artifact / directory).glob("*.apk")):
                 add_package(package, destination / package.name)
         (args.output / directories[1] / "vermagic").write_text(meta["vermagic"] + "\n")
-    # Pages 限制只影响站点；超限包不进入可发布 feed，也不进入最终平台 ZIP。
+    # 下载用插件包不受 Pages 单文件限制，也不需要软件源索引。
+    shutil.copytree(args.output, args.packages_output / "plugins", copy_function=link_or_copy)
+    # Pages 限制只影响站点 feed；完整 APK 包池已单独保留供 Artifact/Release 使用。
     excluded = []
     for package in sorted(args.output.rglob("*.apk")):
         if package.stat().st_size >= 25 * 1024 * 1024:
@@ -105,6 +109,8 @@ def merge(args):
             package.unlink()
             print(f"【软件源】仅跳过 CF 超限包：{relative}")
     (args.output / "excluded-packages.json").write_text(
+        json.dumps(excluded, ensure_ascii=False, indent=2) + "\n")
+    (args.packages_output / "plugins/excluded-packages.json").write_text(
         json.dumps(excluded, ensure_ascii=False, indent=2) + "\n")
     # 不复制旧 packages.adb，必须为软件包并集重新生成完整索引。
     for directory, (artifact, override) in sorted(repositories.items()):
@@ -119,7 +125,7 @@ def merge(args):
                       f'{html.escape(str(path.relative_to(args.output)))}</a></li>'
                       for path in sorted(args.output.rglob("packages.adb")))
     (args.output / "index.html").write_text(
-        f'<!doctype html><meta charset="utf-8"><title>APK 软件源 {tag}</title>'
+        f'<!doctype html><meta charset="utf-8"><title>APK 软件源 {", ".join(sorted(source_tags))}</title>'
         f'<h1>本次编译的 APK 软件源</h1><ul>{links}</ul>\n')
     shutil.copytree(args.output, args.packages_output / "feed", copy_function=link_or_copy)
     (args.packages_output / "说明.txt").write_text(
@@ -150,11 +156,11 @@ def merge(args):
                 own_excluded = [item for item in excluded if any(
                     Path(item["path"]).is_relative_to(directory) for directory in directories)]
                 archive.writestr("excluded-packages.json", json.dumps(own_excluded, ensure_ascii=False, indent=2))
-    result = {"project": host.split(".")[0], "tag": tag, "host": host,
+    result = {"project": host.split(".")[0], "source_tags": sorted(source_tags), "host": host,
               "builds": len(entries), "repositories": len(repositories)}
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-            output.write(f"project={result['project']}\ntag={tag}\n")
+            output.write(f"project={result['project']}\nsource_tags={','.join(result['source_tags'])}\n")
     print("【软件源】合并完成：" + json.dumps(result, ensure_ascii=False))
 
 

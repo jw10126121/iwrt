@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "Scripts/ci_organize_apk_packages.py"
 
 
-def write_test_apk(path, package, depends="", provides=""):
+def write_test_apk(path, package, depends="", provides="", payload_size=0):
     control = f"Package: {package}\nVersion: 1\n"
     if depends:
         control += f"Depends: {depends}\n"
@@ -32,10 +32,33 @@ def write_test_apk(path, package, depends="", provides=""):
         info = tarfile.TarInfo("./control.tar.gz")
         info.size = len(payload)
         archive.addfile(info, io.BytesIO(payload))
+        if payload_size:
+            info = tarfile.TarInfo("./data")
+            info.size = payload_size
+            archive.addfile(info, io.BytesIO(b"\0" * payload_size))
     path.write_bytes(outer.getvalue())
 
 
 class OrganizeApkPackagesTest(unittest.TestCase):
+    def test_standalone_pool_without_indexes_archives_oversized_apks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plugin_pool = root / "plugins"
+            userspace = plugin_pool / "libwrt/abc1234/packages/qualcommax/ipq60xx/aarch64_cortex-a53"
+            userspace.mkdir(parents=True)
+            write_test_apk(userspace / "large-1.0.apk", "large", payload_size=25 * 1024 * 1024)
+            archives = root / "archives"
+            result = subprocess.run([
+                "python3", str(SCRIPT), "--input", str(plugin_pool), "--output", str(archives),
+                "--artifact-output", str(root / "artifact")],
+                text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            archive_path = archives / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-plugins.zip"
+            with zipfile.ZipFile(archive_path) as archive:
+                names = archive.namelist()
+                self.assertIn("packages/aarch64_cortex-a53/large-1.0.apk", names)
+                self.assertFalse(any(name.endswith("packages.adb") for name in names))
+
     def test_platform_archive_is_curated_and_not_a_feed_copy(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -62,9 +85,9 @@ class OrganizeApkPackagesTest(unittest.TestCase):
                                      str(artifact_output)], text=True,
                                     capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            archive_path = output / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-packages.zip"
+            archive_path = output / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-plugins.zip"
             self.assertTrue(archive_path.is_file())
-            second_archive = output / "libwrt-abc1234-mediatek-filogic-aarch64_cortex-a53-packages.zip"
+            second_archive = output / "libwrt-abc1234-mediatek-filogic-aarch64_cortex-a53-plugins.zip"
             self.assertTrue(second_archive.is_file())
             with zipfile.ZipFile(archive_path) as archive:
                 names = archive.namelist()
@@ -115,12 +138,12 @@ class OrganizeApkPackagesTest(unittest.TestCase):
                 "--artifact-output", str(artifact), "--apk", str(apk_tool)],
                 text=True, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            platform_dir = artifact / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-packages"
+            platform_dir = artifact / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-plugins"
             plugin_dir = platform_dir / "luci-app-socat"
             self.assertEqual({path.name for path in plugin_dir.glob("*.apk")}, {
                 "luci-app-socat_1.apk", "luci-i18n-socat-zh-cn_1.apk",
                 "libhelper_1.apk", "libbase_1.apk", "socat-1.apk", "libsocket-1.apk"})
-            with zipfile.ZipFile(archives / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-packages.zip") as archive:
+            with zipfile.ZipFile(archives / "libwrt-abc1234-qualcommax-ipq60xx-aarch64_cortex-a53-plugins.zip") as archive:
                 names = set(archive.namelist())
             self.assertIn("luci-app-socat/luci-app-socat_1.apk", names)
             self.assertIn("luci-app-socat/libbase_1.apk", names)

@@ -1,6 +1,6 @@
 #CI项目
 name: CUSTOM-IWRT-ALL
-run-name: CUSTOM-IWRT-ALL-${{ inputs.SOURCE_TYPE }}-${{ inputs.WRT_RELEASE_FIRMWARE && 'release' || 'test' }}
+run-name: CUSTOM-IWRT-ALL-${{ inputs.SOURCE_TYPE }}-${{ (inputs.WRT_RELEASE_FIRMWARE || inputs.WRT_RELEASE_PACKAGES) && 'release' || 'test' }}
 
 #CI计划
 on:
@@ -14,12 +14,12 @@ on:
         type: string
         default: ''
       WRT_RELEASE_FIRMWARE:
-        description: '是否发布'
+        description: '是否将各平台固件 ZIP 加入统一 Release'
         required: false
         type: boolean
         default: false
       WRT_RELEASE_PACKAGES:
-        description: '是否将按平台整理的 APK feed 包发布到独立 Release'
+        description: '是否将各平台插件 ZIP 加入统一 Release'
         required: false
         type: boolean
         default: false
