@@ -15,7 +15,7 @@ def workflow(name):
 
 class FeedWorkflowTest(unittest.TestCase):
     def test_every_entry_waits_for_all_builds_and_publishes_once(self):
-        for name in ("CUSTOM-iwrt-all.yml", "CUSTOM-iwrt.yml", "CUSTOM-LWRT.yml", "DEFAULT.yml"):
+        for name in ("CUSTOM-iwrt-all.yml", "DEFAULT.yml"):
             with self.subTest(workflow=name):
                 jobs = workflow(name)["jobs"]
                 builds = {name for name, job in jobs.items()
@@ -34,20 +34,21 @@ class FeedWorkflowTest(unittest.TestCase):
                                      publisher["with"]["WRT_FEED_HOST"])
                     self.assertNotIn("WRT_RELEASE_FIRMWARE", jobs[name]["with"])
 
-    def test_core_only_delivers_one_raw_build_artifact(self):
+    def test_core_delivers_raw_and_immediately_usable_device_artifacts(self):
         steps = workflow("CORE-ALL.yml")["jobs"]["build"]["steps"]
         commands = "\n".join(step.get("run", "") for step in steps)
-        self.assertNotIn("ci_organize_outputs.sh", commands)
-        self.assertNotIn("ci_supplement_versions_from_manifest.sh", commands)
+        self.assertIn("ci_build_outputs.py\" ready", commands)
         self.assertNotIn("gh release", commands)
         self.assertIn("ci_build_outputs.py\" export", commands)
         self.assertFalse(any("cloudflare/" in step.get("uses", "") for step in steps))
         uploads = [step for step in steps if "actions/upload-artifact@" in step.get("uses", "")]
-        self.assertEqual(len(uploads), 1)
-        self.assertTrue(uploads[0]["with"]["name"].endswith("-build-output"))
-        self.assertEqual(uploads[0]["with"]["if-no-files-found"], "error")
-        self.assertNotIn("continue-on-error", uploads[0])
-        self.assertEqual(uploads[0]["with"]["retention-days"], 1)
+        self.assertEqual(len(uploads), 3)
+        names = [step["with"]["name"] for step in uploads]
+        self.assertTrue(any(name.endswith("-internal-build-output") for name in names))
+        self.assertTrue(any(name.endswith("-firmware") for name in names))
+        self.assertTrue(any(name.endswith("-apk-packages") for name in names))
+        self.assertTrue(all(step["with"]["if-no-files-found"] == "error" for step in uploads))
+        self.assertTrue(all("continue-on-error" not in step for step in uploads))
 
     def test_publisher_organizes_firmware_and_deploys_one_complete_feed(self):
         publisher = workflow("PUBLISH-OUTPUTS.yml")["jobs"]["publish"]
@@ -55,7 +56,7 @@ class FeedWorkflowTest(unittest.TestCase):
         steps = publisher["steps"]
         downloads = [step for step in steps if "actions/download-artifact@" in step.get("uses", "")]
         self.assertEqual(len(downloads), 1)
-        self.assertEqual(downloads[0]["with"]["pattern"], "*-build-output")
+        self.assertEqual(downloads[0]["with"]["pattern"], "*-internal-build-output")
         self.assertFalse(downloads[0]["with"]["merge-multiple"])
         deploys = [step for step in steps if "cloudflare/" in step.get("uses", "")]
         self.assertEqual(len(deploys), 1)

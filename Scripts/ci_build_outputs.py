@@ -9,6 +9,8 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
+import zipfile
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -57,6 +59,62 @@ def export(args):
     print(f"【产物】已导出原始构建：{meta['WRT_DEVICE']} / {meta['OUTPUT_NAME_PREFIX']}")
 
 
+def prepare_firmware(artifact, meta, build):
+    build.mkdir()
+    with tarfile.open(artifact / "firmware.tar") as archive:
+        archive.extractall(build, filter="data")
+    (build / "config_mine").mkdir(exist_ok=True)
+    environment = dict(os.environ, **meta, OPENWRT_PATH=str(build),
+                       GITHUB_WORKSPACE=str(SCRIPTS.parent), WRT_DIR_SCRIPTS="Scripts",
+                       GITHUB_ENV=str(build / "environment"), GITHUB_OUTPUT=str(build / "output"))
+    for script in ("ci_organize_outputs.sh", "ci_supplement_versions_from_manifest.sh"):
+        subprocess.run(["bash", str(SCRIPTS / script)], env=environment, check=True)
+
+
+def add_tree(archive, root, prefix, exclude=()):
+    for path in sorted(root.rglob("*")):
+        if path.is_file() and not any(part in exclude for part in path.relative_to(root).parts):
+            archive.write(path, (Path(prefix) / path.relative_to(root)).as_posix())
+
+
+def ready(args):
+    artifact = args.input
+    meta = json.loads((artifact / "build.json").read_text())
+    validate_metadata(meta)
+    require((artifact / "firmware.tar").is_file(), "缺少固件原始产物")
+    feed = artifact / "feed"
+    feed_manifest = feed / "manifest.json"
+    require(feed_manifest.is_file(), "缺少软件源产物")
+    feed_meta = json.loads(feed_manifest.read_text())
+    tag = f"build-{meta['GITHUB_RUN_ID']}-{meta['GITHUB_RUN_ATTEMPT']}"
+    require(feed_meta.get("deployment_tag") == tag, "软件源不属于本次运行")
+    for directory in (args.firmware_output, args.packages_output):
+        require(not directory.exists(), f"输出目录已存在，拒绝覆盖：{directory}")
+    args.firmware_output.mkdir(parents=True)
+    args.packages_output.mkdir(parents=True)
+    prefix = meta["OUTPUT_NAME_PREFIX"]
+    firmware_zip = args.firmware_output / f"{prefix}-firmware.zip"
+    packages_zip = args.packages_output / f"{prefix}-apk-packages.zip"
+    with tempfile.TemporaryDirectory(prefix="iwrt-ready-") as temporary:
+        build = Path(temporary) / prefix
+        prepare_firmware(artifact, meta, build)
+        upload = build / "upload"
+        require(upload.is_dir() and any(upload.iterdir()), f"未生成可用固件：{prefix}")
+        with zipfile.ZipFile(firmware_zip, "w", compression=zipfile.ZIP_STORED) as archive:
+            add_tree(archive, upload, "")
+        with zipfile.ZipFile(packages_zip, "w", compression=zipfile.ZIP_STORED) as archive:
+            add_tree(archive, feed, "feed", exclude=("offline", "tools"))
+            offline = feed / "offline"
+            if offline.is_dir():
+                add_tree(archive, offline, "offline")
+            archive.writestr("说明.txt",
+                             "单设备 APK 包归档\n\n"
+                             "feed/：该设备选中的插件、递归依赖、内核包及软件源索引。\n"
+                             "offline/：该设备其余内置包及依赖，仅供离线下载。\n"
+                             "软件源目录保留源码、平台、架构及内核 ABI 层级。\n")
+    print(f"【产物】单设备可用包已整理：{firmware_zip.name}、{packages_zip.name}")
+
+
 def organize(args):
     manifests = sorted(args.input.glob("*/build.json"))
     require(len(manifests) == args.expected_count and manifests,
@@ -86,15 +144,7 @@ def organize(args):
     for artifact, meta in entries:
         prefix = meta["OUTPUT_NAME_PREFIX"]
         build = (args.work / prefix).resolve()
-        build.mkdir()
-        with tarfile.open(artifact / "firmware.tar") as archive:
-            archive.extractall(build, filter="data")
-        (build / "config_mine").mkdir(exist_ok=True)
-        environment = dict(os.environ, **meta, OPENWRT_PATH=str(build),
-                           GITHUB_WORKSPACE=str(SCRIPTS.parent), WRT_DIR_SCRIPTS="Scripts",
-                           GITHUB_ENV=str(build / "environment"), GITHUB_OUTPUT=str(build / "output"))
-        for script in ("ci_organize_outputs.sh", "ci_supplement_versions_from_manifest.sh"):
-            subprocess.run(["bash", str(SCRIPTS / script)], env=environment, check=True)
+        prepare_firmware(artifact, meta, build)
         destination = args.output / meta["WRT_DEVICE"] / prefix
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(build / "upload"), destination)
@@ -126,6 +176,10 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     exporter = commands.add_parser("export")
     exporter.add_argument("--output", type=Path, required=True)
+    ready_parser = commands.add_parser("ready")
+    ready_parser.add_argument("--input", type=Path, required=True)
+    ready_parser.add_argument("--firmware-output", type=Path, required=True)
+    ready_parser.add_argument("--packages-output", type=Path, required=True)
     organizer = commands.add_parser("organize")
     organizer.add_argument("--input", type=Path, required=True)
     organizer.add_argument("--expected-count", type=int, required=True)
@@ -135,7 +189,7 @@ def main():
         command.add_argument("--work", type=Path, required=True)
     args = parser.parse_args()
     try:
-        {"export": export, "organize": organize, "release": release}[args.command](args)
+        {"export": export, "ready": ready, "organize": organize, "release": release}[args.command](args)
     except (ValueError, KeyError, OSError, tarfile.TarError, subprocess.CalledProcessError) as error:
         print(f"【产物】处理失败：{error}", file=sys.stderr)
         return 1

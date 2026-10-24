@@ -712,11 +712,37 @@ jobs:
         python3 "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/ci_build_outputs.py" export \
           --output "$GITHUB_WORKSPACE/build-output"
 
-    - name: Upload Raw Build Outputs (传递原始构建产物)
+    - name: Prepare Ready-to-use Device Archives (整理单设备可用包)
+      if: steps.finalize_compile.outputs.status == 'success'
+      run: |
+        python3 "$GITHUB_WORKSPACE/$WRT_DIR_SCRIPTS/ci_build_outputs.py" ready \
+          --input "$GITHUB_WORKSPACE/build-output" \
+          --firmware-output "$GITHUB_WORKSPACE/ready-firmware" \
+          --packages-output "$GITHUB_WORKSPACE/ready-apk-packages"
+
+    - name: Upload Ready Firmware Archive (上传单设备固件包)
       if: steps.finalize_compile.outputs.status == 'success'
       uses: actions/upload-artifact@v6.0.0
       with:
-        name: ${{ env.OUTPUT_NAME_PREFIX }}-build-output
+        name: ${{ env.OUTPUT_NAME_PREFIX }}-firmware
+        path: ${{ github.workspace }}/ready-firmware/*.zip
+        if-no-files-found: error
+        compression-level: 0
+
+    - name: Upload Ready APK Package Archive (上传单设备插件包)
+      if: steps.finalize_compile.outputs.status == 'success'
+      uses: actions/upload-artifact@v6.0.0
+      with:
+        name: ${{ env.OUTPUT_NAME_PREFIX }}-apk-packages
+        path: ${{ github.workspace }}/ready-apk-packages/*.zip
+        if-no-files-found: error
+        compression-level: 0
+
+    - name: Upload Internal Raw Build Outputs (上传内部原始中间产物)
+      if: steps.finalize_compile.outputs.status == 'success'
+      uses: actions/upload-artifact@v6.0.0
+      with:
+        name: ${{ env.OUTPUT_NAME_PREFIX }}-internal-build-output
         path: ${{ github.workspace }}/build-output/
         if-no-files-found: error
         retention-days: 1

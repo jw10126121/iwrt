@@ -8,6 +8,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +46,13 @@ class BuildOutputsTest(unittest.TestCase):
         feed.mkdir()
         (feed / "manifest.json").write_text(json.dumps({"deployment_tag": "build-123-1"}))
         (feed / "demo.apk").write_text("插件留在软件源")
+        userspace = feed / "immortalwrt/abc1234/packages/test/testsub/testarch"
+        userspace.mkdir(parents=True)
+        (userspace / "packages.adb").write_text("索引")
+        (userspace / "demo.apk").write_text("插件")
+        offline = feed / "offline/immortalwrt/abc1234/packages/test/testsub/testarch"
+        offline.mkdir(parents=True)
+        (offline / "builtin.apk").write_text("内置包")
         output = self.inputs / prefix
         env = dict(self.environment, OPENWRT_PATH=str(build), APK_FEED_OUT=str(feed),
                    WRT_DEVICE=device, OUTPUT_NAME_PREFIX=prefix, DEVICE_NAME_LIST=target,
@@ -73,6 +81,29 @@ class BuildOutputsTest(unittest.TestCase):
             self.assertTrue(any("immortalwrt-glinet_gl-mt6000-squashfs" in name for name in names))
             self.assertFalse(any(name.endswith(".apk") for name in names))
         self.assertFalse((self.root / "test-build/upload").exists())
+
+    def test_ready_export_creates_separate_device_firmware_and_package_archives(self):
+        artifact = self.export()
+        result = self.run_script("ready", "--input", artifact,
+                                 "--firmware-output", self.root / "ready/firmware",
+                                 "--packages-output", self.root / "ready/apk-packages")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        firmware_zip = self.root / "ready/firmware/test-build-firmware.zip"
+        packages_zip = self.root / "ready/apk-packages/test-build-apk-packages.zip"
+        self.assertTrue(firmware_zip.is_file())
+        self.assertTrue(packages_zip.is_file())
+        with zipfile.ZipFile(firmware_zip) as archive:
+            names = archive.namelist()
+            self.assertTrue(any(name.endswith("_squashfs-sysupgrade.bin") for name in names))
+            self.assertTrue(any(name.startswith("readme_test-build") for name in names))
+            self.assertTrue(any(name.startswith("config_test-build") for name in names))
+            self.assertFalse(any(name.endswith(".apk") for name in names))
+        with zipfile.ZipFile(packages_zip) as archive:
+            names = archive.namelist()
+            self.assertIn("feed/immortalwrt/abc1234/packages/test/testsub/testarch/demo.apk", names)
+            self.assertIn("feed/immortalwrt/abc1234/packages/test/testsub/testarch/packages.adb", names)
+            self.assertIn("offline/immortalwrt/abc1234/packages/test/testsub/testarch/builtin.apk", names)
+            self.assertFalse(any(name.startswith("tools/") for name in names))
 
     def test_single_device_is_organized_and_versions_are_supplemented_in_publisher(self):
         self.export()

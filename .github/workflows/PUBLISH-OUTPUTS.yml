@@ -31,11 +31,11 @@ jobs:
       - name: 检出项目
         uses: actions/checkout@v6
 
-      # 分开下载，不能直接 merge-multiple，否则旧索引与同名包会被覆盖。
+      # 只下载标记为 internal 的原始中间产物；单设备可用 ZIP 不参与汇总。
       - name: 下载本工作流的全部原始产物
         uses: actions/download-artifact@v7
         with:
-          pattern: '*-build-output'
+          pattern: '*-internal-build-output'
           path: build-artifacts
           merge-multiple: false
 
